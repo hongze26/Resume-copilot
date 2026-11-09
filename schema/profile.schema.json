@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/wangshen-helper/profile.schema.json",
+  "title": "网申助手个人档案",
+  "description": "本地个人档案。x-sensitivity: low/medium/high；high 字段只允许精确匹配（站点适配器字典或标签精确同义词），禁止模糊相似度匹配，日志只输出掩码。x-longtext: true 的字段不自动生成、不改写，只由用户手动选择插入。",
+  "type": "object",
+  "required": ["schemaVersion", "meta", "basic", "contact", "education"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": 1, "description": "档案结构版本。升级时由迁移函数逐版本转换。" },
+    "meta": {
+      "type": "object",
+      "required": ["createdAt", "updatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": ["string", "null"], "format": "date-time", "description": "用户最后一次确认“已核对”的时间；为 null 时填写前提示先核对。" },
+        "source": { "enum": ["manual", "json-import", "resume-parse"], "description": "最初来源；解析结果必须经人工核对。" }
+      }
+    },
+
+    "basic": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "maxLength": 50, "x-sensitivity": "medium" },
+        "nameEn": { "type": "string", "x-sensitivity": "medium" },
+        "gender": { "enum": ["male", "female"], "x-sensitivity": "medium" },
+        "birthDate": { "$ref": "#/$defs/date", "x-sensitivity": "medium" },
+        "idType": { "enum": ["resident-id", "passport", "hk-macau-pass", "taiwan-pass", "other"], "x-sensitivity": "high" },
+        "idNumber": { "type": "string", "pattern": "^[0-9A-Za-z]{6,20}$", "x-sensitivity": "high", "x-match": "exact-only" },
+        "nationality": { "type": "string", "default": "中国", "x-sensitivity": "low" },
+        "ethnicity": { "type": "string", "description": "标准 56 个民族名称之一，如“汉族”。", "x-sensitivity": "medium", "x-enum-ref": "ethnicity" },
+        "politicalStatus": { "$ref": "#/$defs/politicalStatus", "x-sensitivity": "high", "x-match": "exact-only" },
+        "partyJoinDate": { "$ref": "#/$defs/date", "x-sensitivity": "high", "x-match": "exact-only" },
+        "maritalStatus": { "enum": ["unmarried", "married", "divorced", "widowed"], "x-sensitivity": "high", "x-match": "exact-only" },
+        "healthStatus": { "type": "string", "description": "如“健康”“良好”；按用户原文保存。", "x-sensitivity": "high", "x-match": "exact-only" },
+        "heightCm": { "type": "number", "x-sensitivity": "medium" },
+        "nativePlace": { "$ref": "#/$defs/region", "description": "籍贯（祖籍），不等于生源地。", "x-sensitivity": "medium" },
+        "studentOrigin": { "$ref": "#/$defs/region", "description": "生源地（高考所在地），不等于籍贯。", "x-sensitivity": "medium" },
+        "hukou": { "$ref": "#/$defs/region", "description": "户口所在地。", "x-sensitivity": "high", "x-match": "exact-only" },
+        "hukouType": { "enum": ["urban", "rural", "collective", "unknown"], "x-sensitivity": "high", "x-match": "exact-only" },
+        "currentResidence": { "$ref": "#/$defs/region", "description": "现居住地，不等于户籍地址。", "x-sensitivity": "medium" },
+        "photo": { "$ref": "#/$defs/fileRef", "description": "证件照仅保存文件引用和规格说明，上传需用户手动选择文件。", "x-sensitivity": "medium" }
+      }
+    },
+
+    "contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mobile": { "type": "string", "pattern": "^1[3-9][0-9]{9}$", "x-sensitivity": "high", "x-match": "exact-only" },
+        "email": { "type": "string", "format": "email", "x-sensitivity": "medium" },
+        "address": { "type": "string", "description": "详细通讯地址。", "x-sensitivity": "high", "x-match": "exact-only" },
+        "postalCode": { "type": "string", "pattern": "^[0-9]{6}$", "x-sensitivity": "medium" },
+        "emergencyContact": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" },
+            "relation": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" },
+            "mobile": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" }
+          }
+        }
+      }
+    },
+
+    "education": {
+      "type": "array",
+      "description": "按开始时间升序保存；填写顺序由站点适配器决定（国聘按学历层级逐段）。",
+      "items": { "$ref": "#/$defs/educationRecord" }
+    },
+    "work": { "type": "array", "description": "工作与实习经历。", "items": { "$ref": "#/$defs/workRecord" } },
+    "projects": { "type": "array", "items": { "$ref": "#/$defs/projectRecord" } },
+    "studentLeadership": { "type": "array", "description": "学生干部经历。", "items": { "$ref": "#/$defs/roleRecord" } },
+    "socialPractice": { "type": "array", "description": "社会实践。", "items": { "$ref": "#/$defs/roleRecord" } },
+
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "language", "certificate"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "language": { "type": "string", "default": "英语" },
+          "certificate": { "type": "string", "description": "规范名，如 CET4、CET6、IELTS、TOEFL、TEM4、TEM8。", "x-enum-ref": "languageCert" },
+          "score": { "type": "string", "description": "按原文保存，如“568”“7.0”。" },
+          "date": { "$ref": "#/$defs/date" },
+          "listenSpeak": { "enum": ["basic", "good", "proficient", "expert", "unspecified"], "description": "听说能力：一般/良好/熟练/精通。" },
+          "readWrite": { "enum": ["basic", "good", "proficient", "expert", "unspecified"], "description": "读写能力：一般/良好/熟练/精通。" }
+        }
+      }
+    },
+    "computerSkills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "name": { "type": "string", "description": "如“全国计算机等级考试二级（MS Office）”或“Excel”。" },
+          "level": { "type": "string" },
+          "date": { "$ref": "#/$defs/date" }
+        }
+      }
+    },
+    "certificates": {
+      "type": "array",
+      "description": "证书与职业资格。财务相关证书只记录用户确实持有或在考的状态，不虚构。",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "category": { "type": "string", "description": "如“会计类”“审计类”“金融类”。" },
+          "name": { "type": "string", "description": "如“初级会计专业技术资格”“CPA 部分科目”。" },
+          "status": { "enum": ["obtained", "partial", "in-progress"] },
+          "detail": { "type": "string", "description": "如已通过科目。" },
+          "date": { "$ref": "#/$defs/date" },
+          "attachment": { "$ref": "#/$defs/fileRef" }
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "description": "技能条目，如财务分析、Excel、SQL。只记录用户自述。",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "name": { "type": "string" },
+          "level": { "enum": ["basic", "good", "proficient", "expert", "unspecified"], "default": "unspecified" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "honors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "name": { "type": "string" },
+          "date": { "$ref": "#/$defs/date" },
+          "level": { "enum": ["international", "national", "provincial", "city", "enterprise", "school", "department", "other"] },
+          "grade": { "enum": ["special", "first", "second", "third", "other"] },
+          "issuer": { "type": "string" },
+          "description": { "type": "string", "x-longtext": true }
+        }
+      }
+    },
+
+    "family": {
+      "type": "array",
+      "description": "家庭成员及主要社会关系。全部为高敏感，只允许适配器字典或标签精确匹配。",
+      "x-sensitivity": "high",
+      "items": {
+        "type": "object",
+        "required": ["id", "relation", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "relation": { "type": "string", "description": "称谓，如父亲、母亲。", "x-sensitivity": "high", "x-match": "exact-only" },
+          "name": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" },
+          "birthDate": { "$ref": "#/$defs/date", "x-sensitivity": "high", "x-match": "exact-only" },
+          "employer": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" },
+          "position": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" },
+          "politicalStatus": { "$ref": "#/$defs/politicalStatus", "x-sensitivity": "high", "x-match": "exact-only" },
+          "mobile": { "type": "string", "x-sensitivity": "high", "x-match": "exact-only" }
+        }
+      }
+    },
+
+    "intention": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "jobTypes": { "type": "array", "items": { "type": "string" }, "description": "如“财务会计”“审计”。" },
+        "cities": { "type": "array", "items": { "$ref": "#/$defs/region" } },
+        "salaryMin": { "type": "integer", "minimum": 0, "description": "元/月。" },
+        "salaryMax": { "type": "integer", "minimum": 0 },
+        "acceptJobAdjustment": { "$ref": "#/$defs/triState", "description": "是否服从岗位调剂。" },
+        "acceptEmployerAdjustment": { "$ref": "#/$defs/triState", "description": "是否服从单位调剂。" },
+        "earliestStartDate": { "$ref": "#/$defs/date", "description": "最早到岗/可参加实习时间。" }
+      }
+    },
+
+    "declarations": {
+      "type": "object",
+      "description": "声明类问题。默认不自动填写，只作为预览中的参考值，必须用户逐项确认。",
+      "x-sensitivity": "high",
+      "additionalProperties": false,
+      "properties": {
+        "hasDisciplinaryRecord": { "$ref": "#/$defs/triState", "x-sensitivity": "high", "x-match": "exact-only" },
+        "disciplinaryDetail": { "type": "string", "x-longtext": true, "x-sensitivity": "high" }
+      }
+    },
+
+    "textTemplates": {
+      "type": "array",
+      "description": "用户自写的长文本模板库（自我评价、求职动机等）。工具只提供手动选择插入，不生成、不改写。",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "body"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "title": { "type": "string" },
+          "kind": { "enum": ["self-assessment", "motivation", "why-company", "school-experience", "other"] },
+          "body": { "type": "string", "x-longtext": true }
+        }
+      }
+    },
+
+    "custom": {
+      "type": "array",
+      "description": "可选自定义字段。label 用于标签精确匹配；不参与模糊匹配。",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/recordId" },
+          "label": { "type": "string" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "value": { "type": "string" },
+          "sensitivity": { "enum": ["low", "medium", "high"], "default": "medium" }
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "recordId": { "type": "string", "pattern": "^[a-z0-9-]{4,40}$", "description": "记录稳定 ID，用于撤销日志和“已填写记录”比对。" },
+    "date": {
+      "type": "string",
+      "description": "规范日期。精度随原文：YYYY、YYYY-MM 或 YYYY-MM-DD；不得为凑精度补“01”日。",
+      "pattern": "^[0-9]{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?)?$"
+    },
+    "dateOrPresent": {
+      "oneOf": [ { "$ref": "#/$defs/date" }, { "const": "present", "description": "至今" } ]
+    },
+    "triState": { "enum": ["yes", "no", "unset"] },
+    "politicalStatus": {
+      "enum": ["cpc-member", "cpc-probationary", "cyl-member", "democratic-party", "non-party", "masses", "other"],
+      "description": "中共党员 / 中共预备党员 / 共青团员 / 民主党派 / 无党派人士 / 群众 / 其他。"
+    },
+    "region": {
+      "type": "object",
+      "description": "行政区划。存规范全称；匹配时去后缀比对（省/市/自治区/特别行政区）。直辖市 city 可与 province 相同。",
+      "required": ["province"],
+      "additionalProperties": false,
+      "properties": {
+        "country": { "type": "string", "default": "中国" },
+        "province": { "type": "string" },
+        "city": { "type": "string" },
+        "district": { "type": "string" },
+        "code": { "type": "string", "pattern": "^[0-9]{6}$", "description": "可选的 6 位行政区划代码，有则优先用于匹配。" }
+      }
+    },
+    "fileRef": {
+      "type": "object",
+      "description": "附件引用：只保存元数据；文件本体如需长期保存则存 IndexedDB（P1）。",
+      "additionalProperties": false,
+      "properties": {
+        "fileName": { "type": "string" },
+        "mime": { "type": "string" },
+        "sizeBytes": { "type": "integer" },
+        "widthPx": { "type": "integer" },
+        "heightPx": { "type": "integer" },
+        "blobKey": { "type": "string" }
+      }
+    },
+    "educationRecord": {
+      "type": "object",
+      "required": ["id", "level", "school", "start"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/recordId" },
+        "level": { "enum": ["junior-high-or-below", "secondary-vocational", "high-school", "junior-college", "bachelor", "master", "doctor"], "description": "学历层次（与学位分开）。" },
+        "degree": { "enum": ["none", "bachelor", "master", "doctor", "other"], "description": "学位。" },
+        "school": { "type": "string", "description": "完整学校名称。" },
+        "schoolCountry": { "type": "string", "default": "中国" },
+        "schoolRegion": { "$ref": "#/$defs/region" },
+        "college": { "type": "string", "description": "院系。" },
+        "majorCategory": { "type": "string", "description": "学科门类/专业类，如“经济学/经济学类”。" },
+        "major": { "type": "string" },
+        "researchDirection": { "type": "string" },
+        "start": { "$ref": "#/$defs/date" },
+        "end": { "$ref": "#/$defs/dateOrPresent" },
+        "studyMode": { "enum": ["full-time", "part-time"], "description": "全日制/非全日制。" },
+        "admissionType": { "enum": ["unified", "non-unified", "non-mainland"], "description": "统招/非统招/非内地院校。" },
+        "durationYears": { "type": "number", "multipleOf": 0.5 },
+        "overseasYears": { "type": "number", "minimum": 0, "description": "海外学习年限（年），只在境外就读时填写。" },
+        "isTransferFromJuniorCollege": { "$ref": "#/$defs/triState", "description": "是否专升本。" },
+        "hasDoubleDegree": { "$ref": "#/$defs/triState" },
+        "gpa": { "type": "string", "description": "按原文保存，如“3.6/4.0”。" },
+        "rank": { "type": "string", "description": "专业排名，如“5/120”。" },
+        "isStudentCadre": { "$ref": "#/$defs/triState" },
+        "mainCourses": { "type": "array", "items": { "type": "string" } },
+        "trainingMode": { "type": "string", "description": "培养方式原文，如“全日制统招”“定向”。" },
+        "schoolExperience": { "type": "string", "x-longtext": true, "description": "在校经历，用户自写；工具只原样插入。" }
+      }
+    },
+    "workRecord": {
+      "type": "object",
+      "required": ["id", "kind", "company", "title", "start"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/recordId" },
+        "kind": { "enum": ["full-time", "part-time", "internship"] },
+        "company": { "type": "string" },
+        "companyNature": { "type": "string", "description": "按用户原文，如“国企”“事业单位”；与站点选项精确对应才自动选择。" },
+        "department": { "type": "string" },
+        "title": { "type": "string" },
+        "location": { "$ref": "#/$defs/region" },
+        "start": { "$ref": "#/$defs/date" },
+        "end": { "$ref": "#/$defs/dateOrPresent" },
+        "description": { "type": "string", "x-longtext": true },
+        "salary": { "type": "number", "minimum": 0, "description": "税前月薪（元）。" },
+        "hasReferee": { "$ref": "#/$defs/triState", "description": "是否有工作证明人。" },
+        "note": { "type": "string" }
+      }
+    },
+    "projectRecord": {
+      "type": "object",
+      "required": ["id", "name", "start"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/recordId" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "organization": { "type": "string" },
+        "teamSize": { "type": "integer", "minimum": 1 },
+        "start": { "$ref": "#/$defs/date" },
+        "end": { "$ref": "#/$defs/dateOrPresent" },
+        "introduction": { "type": "string", "x-longtext": true },
+        "duty": { "type": "string", "x-longtext": true },
+        "achievement": { "type": "string", "x-longtext": true }
+      }
+    },
+    "roleRecord": {
+      "type": "object",
+      "required": ["id", "organization", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/recordId" },
+        "organization": { "type": "string" },
+        "role": { "type": "string" },
+        "start": { "$ref": "#/$defs/date" },
+        "end": { "$ref": "#/$defs/dateOrPresent" },
+        "description": { "type": "string", "x-longtext": true }
+      }
+    }
+  }
+}

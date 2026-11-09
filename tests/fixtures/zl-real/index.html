@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>智联校园·我的简历（Element UI 夹具）</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  body { margin: 0; font-family: sans-serif; background: #f4f6fa; }
+  .banner { height: 80px; line-height: 80px; padding-left: 40px; color: #3a6ee8; font-size: 22px; background: #e8f0ff; }
+  .layout { display: flex; gap: 16px; padding: 16px; max-width: 1200px; }
+  .resume-left { flex: 1; background: #fff; padding: 24px 48px; }
+  .resume-right { width: 300px; flex: none; }
+  .resume-nav { list-style: none; padding: 0; background: #fff; }
+  .resume-nav__item { padding: 12px 24px; cursor: pointer; }
+  .resume-nav__item.is-active { font-weight: bold; border-left: 3px solid #222; }
+  .form-content--title-box { display: flex; justify-content: space-between; align-items: center; }
+  .form-content--required { color: #fff; background: #f56c6c; font-size: 12px; padding: 1px 4px; border-radius: 3px; }
+  .title--description { color: #999; font-size: 13px; margin-bottom: 16px; }
+  .apply-form { position: relative; border-bottom: 1px solid #eee; padding: 12px 0; }
+  .apply-form .el-form { display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; padding-right: 80px; }
+  .apply-form .el-form-item.item-aline, .apply-form .btn-box { grid-column: 1 / span 2; }
+  .apply-form > .icon-box { position: absolute; right: 0; top: 12px; }
+  .icon-box { color: #1a6bff; cursor: pointer; }
+  .icon-box-disabled { color: #bbb; cursor: not-allowed; }
+  .el-select, .el-date-editor.el-input, .el-autocomplete { width: 100%; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="app.js"></script>
+</body>
+</html>

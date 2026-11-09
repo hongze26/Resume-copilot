@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>夹具：只读展示 → 点“编辑”出现输入框</title>
+    <!-- 自行编写的静态夹具：模拟很多网站“我的简历”页的形态——单项区块先显示为只读文字，点“编辑”才出现输入框；
+         经历类区块已有记录旁也有“编辑”（改已有记录，工具不应自动点）。不含任何第三方网站代码。 -->
+    <style>
+      body { font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6f8; }
+      .page { max-width: 860px; margin: 20px auto; }
+      .block { background: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; }
+      .block-head { display: flex; justify-content: space-between; align-items: center; }
+      .block-title { font-size: 18px; font-weight: 600; }
+      .op { color: #1f6fff; cursor: pointer; }
+      .row { display: flex; gap: 10px; margin: 8px 0; }
+      .row label { width: 90px; text-align: right; color: #666; }
+      input { border: 1px solid #dcdfe6; border-radius: 4px; height: 30px; padding: 0 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="block" id="basic">
+        <div class="block-head">
+          <div class="block-title">基本信息</div>
+          <span class="op op-edit" role="button" id="basic-edit"><i class="icon">✎</i>编辑</span>
+        </div>
+        <div id="basic-view">
+          <div class="row"><span>姓名：</span><span>--</span></div>
+          <div class="row"><span>手机号码：</span><span>--</span></div>
+          <div class="row"><span>电子邮箱：</span><span>--</span></div>
+        </div>
+        <form id="basic-form" style="display: none" onsubmit="window.__fixture.submitEvents++; return false">
+          <div class="row"><label for="f-name">姓名</label><input id="f-name" name="realname" /></div>
+          <div class="row"><label for="f-phone">手机号码</label><input id="f-phone" name="mobile" /></div>
+          <div class="row"><label for="f-mail">电子邮箱</label><input id="f-mail" name="email" /></div>
+          <div class="row">
+            <button type="button" class="btn btn-primary" onclick="window.__fixture.saveClicks++">保存</button>
+            <button type="button" class="btn" onclick="window.__fixture.cancelClicks++">取消</button>
+          </div>
+        </form>
+      </div>
+      <div class="block" id="edu">
+        <div class="block-head">
+          <div class="block-title">教育经历</div>
+          <span class="op op-add" role="button">+ 添加</span>
+        </div>
+        <div class="record">
+          <span>湖南大学 · 会计学 · 本科</span>
+          <span class="op op-edit" role="button" id="edu-edit" onclick="window.__fixture.eduEditClicks++">编辑</span>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.__fixture = { saveClicks: 0, cancelClicks: 0, submitEvents: 0, eduEditClicks: 0, values: {}, records: {} };
+      document.getElementById('basic-edit').addEventListener('click', () => {
+        // 网站常见做法：稍等片刻（请求详情）后切到编辑态，并隐藏“编辑”
+        setTimeout(() => {
+          document.getElementById('basic-view').style.display = 'none';
+          document.getElementById('basic-form').style.display = '';
+          document.getElementById('basic-edit').style.display = 'none';
+        }, 200);
+      });
+    </script>
+  </body>
+</html>

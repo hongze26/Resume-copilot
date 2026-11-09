@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-test/
+release/
+tests/fixtures/dist/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+# 生成的校验器（由 npm run gen:validator 生成）
+src/core/profile/validate.generated.cjs
+# 永远不要把真实档案或诊断报告放进仓库
+*.real.json
+diagnostic-*.json
+
+# 测试简历生成结果（可随时用 node scripts/make-test-resumes.mjs 重新生成）
+tests/resumes/out/
+
+# 本地导出的 PDF 版文档（可能带本机路径，不入库；发给使用者时单独附上）
+docs/*.pdf

@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "网申助手",
+  "short_name": "网申助手",
+  "description": "本地个人档案 + 招聘网站申请表辅助填写（国聘、智联校园专用适配；其他网站通用识别，支持 antd 与 Element UI）。默认本地处理，可选 API，填写前预览，永不自动提交。",
+  "version": "0.9.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzu60BIdcUBdlZSfCznJ7VrT2+db4lOY9iygLQRpRoX2BUFoZ/UBPcqSWcmomnRg+gW5nvwRwYIYoM+DOAKmAyOGZd2ATp4cmVmXiJMCnlH5sdAy/xaeZZQXarKH58VCZwRSC0p4WTre54wL3ttd3L8hBnCADtpCKuViLyR8mHJeB2pqfVuhMwOhWP5AVjSusRl9b0CffLjlyc7zxo/3nuzRziISTjzNS1Nzss/mDZ8FEUFlEIX5odnSCC+k6ifBp4PB5qiouZzLjnNITlM4+5V/5Mz2wJo9CtfejG7V+4pcpTLp2fWBf3vjjmAlAdAxX5Yx8Gz4BhVWUUOIMlJG1HQIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_title": "网申助手",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "options_page": "profile.html",
+  "permissions": [
+    "storage",
+    "scripting",
+    "sidePanel",
+    "activeTab"
+  ],
+  "optional_permissions": [
+    "tabs"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; worker-src 'self'"
+  }
+}

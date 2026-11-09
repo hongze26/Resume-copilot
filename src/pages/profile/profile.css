@@ -1,0 +1,299 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  font-weight: 700;
+  font-size: 16px;
+}
+.status {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.page-banner {
+  margin: 12px 20px 0;
+}
+.issues {
+  margin: 0 20px;
+}
+.issues .banner {
+  margin-top: 12px;
+}
+.issues ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 34%) 1fr;
+  gap: 16px;
+  padding: 16px 20px 40px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+.source {
+  position: sticky;
+  top: 70px;
+  max-height: calc(100vh - 90px);
+  display: flex;
+  flex-direction: column;
+}
+.source h2,
+.sec h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.source-tools {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+.source-tools input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.source-text {
+  overflow: auto;
+  flex: 1;
+}
+.source-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif;
+  margin: 0;
+  user-select: text;
+}
+mark.sensitive {
+  background: #fee4e2;
+  color: #912018;
+  border-radius: 3px;
+}
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.nav a {
+  color: var(--primary);
+  text-decoration: none;
+}
+.nav a:hover {
+  text-decoration: underline;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sec {
+  scroll-margin-top: 80px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.field-wide {
+  grid-column: 1 / -1;
+}
+.f-label {
+  font-size: 13px;
+  font-weight: 500;
+}
+.req {
+  color: var(--danger);
+}
+.sens {
+  color: var(--medium);
+  font-size: 11px;
+  font-weight: 400;
+}
+.f-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.f-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.f-row-top {
+  align-items: flex-start;
+}
+.f-row > input,
+.f-row > textarea {
+  flex: 1;
+  min-width: 0;
+}
+.f-region > input {
+  flex: 1;
+}
+.field input[type='text'],
+.field input[type='number'],
+.field select,
+.field textarea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fff;
+  width: 100%;
+}
+.field textarea {
+  resize: vertical;
+}
+.field input:disabled {
+  background: var(--skip-bg);
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.fill-btn {
+  white-space: nowrap;
+  color: var(--muted);
+}
+.records {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.record {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.record > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  gap: 8px;
+  padding: 2px 0;
+}
+.record[open] > summary {
+  margin-bottom: 10px;
+}
+.rec-title {
+  font-weight: 600;
+}
+.rec-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* 保存位置说明 */
+.save-info {
+  margin: 10px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.save-info:empty {
+  display: none;
+}
+.save-info .btn-small {
+  vertical-align: baseline;
+}
+
+/* 从简历自动填入、尚未保存的字段 */
+.field.autofilled input,
+.field.autofilled select,
+.field.autofilled textarea {
+  background: #fffbe6;
+  border-color: #f5c451;
+}
+.record.autofilled {
+  border-color: #f5c451;
+  background: #fffdf2;
+}
+
+/* 识别结果预览 / 已保存内容 */
+.dialog-wide {
+  max-width: min(760px, calc(100vw - 32px));
+  width: 760px;
+}
+.parse-body {
+  max-height: 60vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+.parse-body h4 {
+  margin: 14px 0 6px;
+  font-size: 14px;
+}
+.parse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.parse-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.parse-row:hover {
+  background: var(--skip-bg);
+}
+.parse-label {
+  min-width: 84px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.parse-value {
+  flex: 1;
+  min-width: 160px;
+  word-break: break-all;
+}
+.warn-text {
+  color: var(--medium);
+}
+.saved-json {
+  width: 100%;
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  resize: vertical;
+}
+/* API 配置与原文相邻，发送前可核对。 */
+.ai-settings { margin: 14px 0; padding: 12px; border: 1px solid #dce2eb; border-radius: 10px; }
+.ai-field { display: grid; gap: 5px; margin: 10px 0; font-size: 13px; }
+.ai-field input { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccd3dd; border-radius: 6px; }
+.parse-record-fields { grid-column: 2 / -1; white-space: pre-wrap; overflow-wrap: anywhere; }

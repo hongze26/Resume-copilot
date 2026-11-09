@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "createdAt": "2026-11-08T10:00:00+08:00",
+    "updatedAt": "2026-11-08T10:00:00+08:00",
+    "reviewedAt": "2026-11-08T10:30:00+08:00",
+    "source": "manual"
+  },
+  "basic": {
+    "name": "林示例",
+    "gender": "female",
+    "birthDate": "2003-05",
+    "idType": "resident-id",
+    "idNumber": "999999200305010000",
+    "nationality": "中国",
+    "ethnicity": "汉族",
+    "politicalStatus": "cyl-member",
+    "maritalStatus": "unmarried",
+    "healthStatus": "健康",
+    "nativePlace": { "province": "湖南省", "city": "长沙市" },
+    "studentOrigin": { "province": "湖南省", "city": "岳阳市" },
+    "hukou": { "province": "湖南省", "city": "岳阳市", "district": "岳阳楼区" },
+    "hukouType": "urban",
+    "currentResidence": { "province": "北京市", "city": "北京市", "district": "海淀区" }
+  },
+  "contact": {
+    "mobile": "13900000000",
+    "email": "sample.applicant@example.com",
+    "address": "示例省示例市示例路 1 号",
+    "emergencyContact": { "name": "林示例父", "relation": "父亲", "mobile": "13900000001" }
+  },
+  "education": [
+    {
+      "id": "edu-bachelor-1",
+      "level": "bachelor",
+      "degree": "bachelor",
+      "school": "示例财经大学",
+      "schoolRegion": { "province": "北京市", "city": "北京市" },
+      "college": "会计学院",
+      "majorCategory": "管理学/工商管理类",
+      "major": "会计学",
+      "start": "2021-09",
+      "end": "2025-06",
+      "studyMode": "full-time",
+      "admissionType": "unified",
+      "durationYears": 4,
+      "isTransferFromJuniorCollege": "no",
+      "hasDoubleDegree": "no",
+      "gpa": "3.52/4.0",
+      "rank": "15/180",
+      "isStudentCadre": "yes",
+      "mainCourses": ["中级财务会计", "成本会计", "审计学", "财务管理"],
+      "trainingMode": "全日制统招",
+      "schoolExperience": "（虚构示例）担任班级学习委员；参与学院财务知识竞赛组织。"
+    },
+    {
+      "id": "edu-master-1",
+      "level": "master",
+      "degree": "master",
+      "school": "示例商学院大学",
+      "schoolRegion": { "province": "上海市", "city": "上海市" },
+      "majorCategory": "管理学/工商管理类",
+      "major": "会计",
+      "researchDirection": "管理会计与数字化",
+      "start": "2025-09",
+      "end": "2027-06",
+      "studyMode": "full-time",
+      "admissionType": "unified",
+      "durationYears": 2,
+      "gpa": "3.7/4.0",
+      "isStudentCadre": "no",
+      "trainingMode": "全日制统招",
+      "schoolExperience": "（虚构示例）参与导师横向课题的数据整理。"
+    }
+  ],
+  "work": [
+    {
+      "id": "work-intern-1",
+      "kind": "internship",
+      "company": "示例会计师事务所（特殊普通合伙）",
+      "companyNature": "民营企业",
+      "department": "审计部",
+      "title": "审计实习生",
+      "location": { "province": "北京市", "city": "北京市" },
+      "start": "2024-07",
+      "end": "2024-09",
+      "description": "（虚构示例）协助年审底稿整理、函证统计与凭证抽查。"
+    },
+    {
+      "id": "work-intern-2",
+      "kind": "internship",
+      "company": "示例能源集团财务有限公司",
+      "companyNature": "国企",
+      "title": "财务实习生",
+      "location": { "province": "上海市", "city": "上海市" },
+      "start": "2026-01",
+      "end": "present",
+      "description": "（虚构示例）协助月度报表核对与资金台账更新。"
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "（虚构）校园商户经营数据分析",
+      "role": "成员",
+      "organization": "示例财经大学",
+      "teamSize": 5,
+      "start": "2023-03",
+      "end": "2023-06",
+      "introduction": "（虚构示例）课程项目。",
+      "duty": "（虚构示例）负责 Excel 数据清洗与指标汇总。"
+    }
+  ],
+  "studentLeadership": [
+    { "id": "lead-1", "organization": "示例财经大学会计学院 2021 级 1 班", "role": "学习委员", "start": "2022-09", "end": "2024-06" }
+  ],
+  "socialPractice": [],
+  "languages": [
+    { "id": "lang-1", "language": "英语", "certificate": "CET6", "score": "520", "date": "2023-06" }
+  ],
+  "computerSkills": [
+    { "id": "comp-1", "name": "全国计算机等级考试二级（MS Office 高级应用）", "level": "合格", "date": "2022-09" }
+  ],
+  "certificates": [
+    { "id": "cert-1", "category": "会计类", "name": "初级会计专业技术资格", "status": "obtained", "date": "2024-05" }
+  ],
+  "skills": [
+    { "id": "skill-1", "name": "Excel（数据透视表、常用函数）", "level": "proficient" }
+  ],
+  "honors": [
+    { "id": "honor-1", "name": "（虚构）校级二等奖学金", "date": "2023-10", "level": "school", "grade": "second", "issuer": "示例财经大学" }
+  ],
+  "family": [
+    { "id": "fam-1", "relation": "父亲", "name": "林示例父", "employer": "示例单位", "position": "职员", "politicalStatus": "masses" }
+  ],
+  "intention": {
+    "jobTypes": ["财务会计", "审计"],
+    "cities": [ { "province": "北京市", "city": "北京市" }, { "province": "上海市", "city": "上海市" } ],
+    "salaryMin": 8000,
+    "salaryMax": 12000,
+    "acceptJobAdjustment": "yes",
+    "acceptEmployerAdjustment": "yes",
+    "earliestStartDate": "2026-12"
+  },
+  "declarations": { "hasDisciplinaryRecord": "unset" },
+  "textTemplates": [
+    { "id": "tpl-1", "title": "自我评价（示例草稿，需本人重写）", "kind": "self-assessment", "body": "（此处由使用者自行编写）" }
+  ],
+  "custom": []
+}

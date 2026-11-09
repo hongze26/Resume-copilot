@@ -1,0 +1,45 @@
+{
+  "name": "resume-copilot",
+  "version": "0.9.0",
+  "private": true,
+  "description": "网申助手：本地档案 + 招聘网站申请表辅助填写（国聘、智联校园专用适配，其他网站通用识别；Chrome/Edge MV3 扩展）",
+  "type": "module",
+  "scripts": {
+    "gen:validator": "node scripts/gen-validator.mjs",
+    "build": "node scripts/gen-validator.mjs && node scripts/build.mjs",
+    "build:test": "node scripts/gen-validator.mjs && node scripts/build.mjs --test",
+    "build:fixtures": "node scripts/build-fixtures.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/gen-validator.mjs && vitest run",
+    "test:e2e": "npm run build:test && npm run build:fixtures && playwright test",
+    "check:network": "node scripts/check-network.mjs dist",
+    "package": "npm run build && node scripts/check-network.mjs && node scripts/package.mjs",
+    "serve:fixtures": "node scripts/serve-fixtures.mjs",
+    "test:e2e:edge": "npm run build:test && npm run build:fixtures && node scripts/run-e2e.mjs msedge",
+    "gen:icons": "node scripts/gen-icons.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/chrome": "^0.3.7",
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "antd": "^5.29.3",
+    "dayjs": "^1.11.23",
+    "element-ui": "^2.15.14",
+    "element-ui-1": "npm:element-ui@^1.4.13",
+    "esbuild": "^0.28.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "vue": "^2.7.16"
+  },
+  "dependencies": {
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^6.5.438"
+  }
+}

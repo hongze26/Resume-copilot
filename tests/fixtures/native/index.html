@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>本地夹具 · 原生表单（native）</title>
+    <style>body{font-family:system-ui,"Microsoft YaHei",sans-serif;max-width:720px;margin:24px auto} .row{margin:10px 0} table td{padding:4px 8px}</style>
+  </head>
+  <body>
+    <h2>个人信息</h2>
+    <form id="f" onsubmit="window.__submits=(window.__submits||0)+1;return false;">
+      <div class="row"><label for="name">姓名</label> <input id="name" name="name" type="text" /></div>
+      <div class="row"><label for="mail">电子邮箱</label> <input id="mail" name="mail" type="email" /></div>
+      <div class="row"><input aria-label="民族" id="eth" type="text" /></div>
+      <div class="row"><span>政治面貌</span>
+        <label><input type="radio" name="pol" value="1" /> 中共党员</label>
+        <label><input type="radio" name="pol" value="2" /> 共青团员</label>
+        <label><input type="radio" name="pol" value="3" /> 群众</label>
+      </div>
+      <div class="row"><label>婚姻状况 <select name="mar"><option value="">请选择</option><option>未婚</option><option>已婚</option></select></label></div>
+      <div class="row"><label for="idn">证件号码（选填）</label> <input id="idn" name="idn" /></div>
+      <div class="row"><label for="pre">籍贯</label> <input id="pre" name="pre" value="已有内容" /></div>
+      <h2>教育经历</h2>
+      <table>
+        <tr><td>学历</td><td><select id="lvl"><option value="">请选择</option><option>博士研究生</option><option>硕士研究生</option><option>大学本科</option></select></td></tr>
+        <tr><td>毕业院校</td><td><input id="sch" /></td></tr>
+        <tr><td>入学/毕业时间</td><td><input id="period" /></td></tr>
+        <tr><td>工作年限</td><td><input id="years" /></td></tr>
+      </table>
+      <h2>其他</h2>
+      <div class="row"><label for="txt">自我评价</label><br /><textarea id="txt" rows="3"></textarea></div>
+      <button type="submit">提交申请</button>
+    </form>
+  </body>
+</html>

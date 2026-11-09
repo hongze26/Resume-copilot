@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 单元测试
+        run: npm test
+      - name: 发布构建、网络与权限检查、打包
+        run: npm run package
+      - name: 安装 Chromium
+        run: npx playwright install --with-deps chromium
+      - name: 端到端测试
+        run: xvfb-run -a npm run test:e2e
+      - name: 上传失败记录
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 7
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: resume-copilot
+          path: release/*.zip
+          retention-days: 14

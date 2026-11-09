@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "createdAt": "2026-11-09T20:00:00+08:00",
+    "updatedAt": "2026-11-09T20:00:00+08:00",
+    "reviewedAt": "2026-11-09T20:10:00+08:00",
+    "source": "manual"
+  },
+  "basic": {
+    "name": "林若溪",
+    "nameEn": "Ruoxi Lin",
+    "gender": "female",
+    "birthDate": "2001-11-23",
+    "idType": "resident-id",
+    "nationality": "中国",
+    "ethnicity": "汉族",
+    "politicalStatus": "cpc-member",
+    "partyJoinDate": "2022-06-28",
+    "maritalStatus": "unmarried",
+    "healthStatus": "健康",
+    "heightCm": 165,
+    "nativePlace": { "province": "湖北省", "city": "宜昌市" },
+    "studentOrigin": { "province": "湖北省", "city": "宜昌市" },
+    "hukou": { "province": "湖北省", "city": "宜昌市", "district": "西陵区" },
+    "hukouType": "urban",
+    "currentResidence": { "province": "上海市", "city": "上海市", "district": "杨浦区" }
+  },
+  "contact": {
+    "mobile": "13800138000",
+    "email": "lin.ruoxi.test@example.com",
+    "address": "上海市杨浦区国定路 100 号 3 号楼 502 室",
+    "postalCode": "200433",
+    "emergencyContact": { "name": "林建国", "relation": "父亲", "mobile": "13900139000" }
+  },
+  "education": [
+    {
+      "id": "edu-bachelor-whu",
+      "level": "bachelor",
+      "degree": "bachelor",
+      "school": "武汉大学",
+      "schoolCountry": "中国",
+      "schoolRegion": { "province": "湖北省", "city": "武汉市" },
+      "college": "经济与管理学院",
+      "majorCategory": "经济学/经济学类",
+      "major": "经济统计学",
+      "start": "2019-09-01",
+      "end": "2023-06-30",
+      "studyMode": "full-time",
+      "admissionType": "unified",
+      "durationYears": 4,
+      "isTransferFromJuniorCollege": "no",
+      "hasDoubleDegree": "no",
+      "gpa": "3.82/4.0",
+      "rank": "8/210",
+      "isStudentCadre": "yes",
+      "mainCourses": ["计量经济学", "多元统计分析", "时间序列分析", "数据库原理", "机器学习导论"],
+      "trainingMode": "非定向",
+      "schoolExperience": "担任经济与管理学院学生会学习部部长，组织学术讲座 12 场；参与国家级大学生创新训练项目 1 项。"
+    },
+    {
+      "id": "edu-master-nus",
+      "level": "master",
+      "degree": "master",
+      "school": "新加坡国立大学",
+      "schoolCountry": "新加坡",
+      "college": "商学院",
+      "majorCategory": "管理学/管理科学与工程类",
+      "major": "商业分析",
+      "researchDirection": "用户增长与因果推断",
+      "start": "2023-08-07",
+      "end": "2024-12-20",
+      "studyMode": "full-time",
+      "admissionType": "non-mainland",
+      "durationYears": 1.5,
+      "overseasYears": 1.5,
+      "gpa": "4.3/5.0",
+      "rank": "前10%",
+      "mainCourses": ["预测分析", "大数据技术", "实验设计与因果推断", "数据可视化"]
+    }
+  ],
+  "work": [
+    {
+      "id": "work-bytedance",
+      "kind": "internship",
+      "company": "北京字节跳动科技有限公司",
+      "companyNature": "民营企业",
+      "department": "商业化数据部",
+      "title": "数据分析实习生",
+      "location": { "province": "上海市", "city": "上海市" },
+      "start": "2025-01-06",
+      "end": "present",
+      "description": "负责广告投放效果分析，搭建 3 个核心指标看板；用 A/B 实验评估新出价策略，推动转化率提升 4.2%；每周输出业务周报。",
+      "salary": 6000,
+      "hasReferee": "yes"
+    },
+    {
+      "id": "work-cmb",
+      "kind": "internship",
+      "company": "招商银行股份有限公司武汉分行",
+      "companyNature": "国有企业",
+      "department": "零售金融部",
+      "title": "数据分析实习生",
+      "location": { "province": "湖北省", "city": "武汉市" },
+      "start": "2022-07-04",
+      "end": "2022-09-30",
+      "description": "清洗 20 万条客户交易数据，用 SQL 与 Python 完成客户分层；协助制作季度营销复盘报告。",
+      "salary": 3000,
+      "hasReferee": "yes"
+    },
+    {
+      "id": "work-tutor",
+      "kind": "part-time",
+      "company": "武汉新东方培训学校",
+      "department": "高中教学部",
+      "title": "数学兼职助教",
+      "location": { "province": "湖北省", "city": "武汉市" },
+      "start": "2020-10-10",
+      "end": "2021-06-20",
+      "description": "每周 6 小时课后答疑与作业批改，所带班级期末平均分提高 11 分。",
+      "salary": 2000,
+      "hasReferee": "no"
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj-churn",
+      "name": "电商用户流失预测与挽留策略",
+      "role": "组长",
+      "organization": "新加坡国立大学商学院",
+      "teamSize": 4,
+      "start": "2024-03-04",
+      "end": "2024-06-28",
+      "introduction": "基于 50 万用户行为日志预测 30 天内流失概率，并设计分层挽留方案。",
+      "duty": "负责特征工程与 XGBoost 建模，统筹分工与汇报。",
+      "achievement": "AUC 0.87，课程项目评分 A，方案被合作企业采纳试点。"
+    },
+    {
+      "id": "proj-dachuang",
+      "name": "长江中游城市群房价时空分析",
+      "role": "核心成员",
+      "organization": "武汉大学（国家级大学生创新训练项目）",
+      "teamSize": 5,
+      "start": "2021-04-01",
+      "end": "2022-04-30",
+      "introduction": "用空间计量模型分析 2010—2020 年 31 个城市房价的空间溢出效应。",
+      "duty": "负责数据收集、清洗和空间自回归模型估计。",
+      "achievement": "以国家级优秀结题，发表省级期刊论文 1 篇（第二作者）。"
+    }
+  ],
+  "studentLeadership": [
+    {
+      "id": "lead-su",
+      "organization": "武汉大学经济与管理学院学生会",
+      "role": "学习部部长",
+      "start": "2020-09-01",
+      "end": "2021-07-01",
+      "description": "组织学术讲座 12 场、考研经验分享会 3 场，部门成员 15 人。"
+    }
+  ],
+  "socialPractice": [
+    {
+      "id": "prac-village",
+      "organization": "湖北省宜昌市秭归县茅坪镇",
+      "role": "暑期调研队员",
+      "start": "2021-07-10",
+      "end": "2021-07-25",
+      "description": "走访 60 户农户调研脐橙电商销售情况，撰写调研报告获校级二等奖。"
+    }
+  ],
+  "languages": [
+    { "id": "lang-en-cet6", "language": "英语", "certificate": "大学英语六级", "score": "612", "date": "2020-12-12", "listenSpeak": "proficient", "readWrite": "expert" },
+    { "id": "lang-en-ielts", "language": "英语", "certificate": "雅思", "score": "7.5", "date": "2023-03-18", "listenSpeak": "proficient", "readWrite": "expert" },
+    { "id": "lang-ja", "language": "日语", "certificate": "日语能力考试N2", "score": "128", "date": "2022-12-04", "listenSpeak": "basic", "readWrite": "good" }
+  ],
+  "computerSkills": [
+    { "id": "cs-ncre", "name": "全国计算机等级考试二级（Python）", "level": "二级", "date": "2020-03-28" }
+  ],
+  "certificates": [
+    { "id": "cert-cda", "category": "职业技能", "name": "CDA 数据分析师二级", "status": "obtained", "date": "2023-05-20" },
+    { "id": "cert-sac", "category": "金融", "name": "证券从业资格", "status": "obtained", "detail": "通过金融市场基础知识、证券市场基本法律法规两科", "date": "2022-03-26" },
+    { "id": "cert-cfa", "category": "金融", "name": "CFA 一级", "status": "in-progress", "detail": "计划 2026 年 2 月参加考试" }
+  ],
+  "skills": [
+    { "id": "sk-python", "name": "Python", "level": "expert", "note": "pandas、scikit-learn、PySpark" },
+    { "id": "sk-sql", "name": "SQL", "level": "proficient" },
+    { "id": "sk-excel", "name": "Excel", "level": "proficient", "note": "数据透视表、Power Query" },
+    { "id": "sk-spark", "name": "Spark", "level": "good" },
+    { "id": "sk-tableau", "name": "Tableau", "level": "good" }
+  ],
+  "honors": [
+    { "id": "hon-national", "name": "国家奖学金", "date": "2021-10-15", "level": "national", "grade": "other", "issuer": "中华人民共和国教育部" },
+    { "id": "hon-mcm", "name": "全国大学生数学建模竞赛湖北赛区一等奖", "date": "2021-11-20", "level": "provincial", "grade": "first", "issuer": "中国工业与应用数学学会" },
+    { "id": "hon-grad", "name": "武汉大学优秀毕业生", "date": "2023-06-10", "level": "school", "grade": "other", "issuer": "武汉大学" }
+  ],
+  "family": [
+    { "id": "fam-father", "relation": "父亲", "name": "林建国", "birthDate": "1972-05-14", "employer": "宜昌市第一中学", "position": "教师", "politicalStatus": "cpc-member", "mobile": "13900139000" },
+    { "id": "fam-mother", "relation": "母亲", "name": "周慧敏", "birthDate": "1974-09-02", "employer": "宜昌市中心人民医院", "position": "护士长", "politicalStatus": "masses", "mobile": "13700137000" }
+  ],
+  "intention": {
+    "jobTypes": ["数据分析师", "商业分析师"],
+    "cities": [
+      { "province": "上海市", "city": "上海市" },
+      { "province": "广东省", "city": "深圳市" },
+      { "province": "浙江省", "city": "杭州市" }
+    ],
+    "salaryMin": 15000,
+    "salaryMax": 25000,
+    "acceptJobAdjustment": "yes",
+    "acceptEmployerAdjustment": "no",
+    "earliestStartDate": "2025-07-01"
+  },
+  "declarations": { "hasDisciplinaryRecord": "no" },
+  "textTemplates": [
+    { "id": "tpl-self", "title": "自我评价", "kind": "self-assessment", "body": "熟练使用 Python、SQL 做数据分析和建模，有互联网与银行两段数据实习；做事主动，能把分析结论讲清楚并推动落地；英语可作为工作语言。" },
+    { "id": "tpl-motivation", "title": "求职动机", "kind": "motivation", "body": "希望在业务数据量大、决策依赖数据的团队里，用分析和实验帮助业务增长。" },
+    { "id": "tpl-why", "title": "为什么选择我们", "kind": "why-company", "body": "贵公司的数据驱动文化和完善的培养体系，与我的职业规划高度一致。" },
+    { "id": "tpl-school", "title": "在校经历", "kind": "school-experience", "body": "本科期间任学院学生会学习部部长，主持国家级大创项目 1 项；硕士期间带领 4 人小组完成用户流失预测项目。" }
+  ],
+  "custom": [
+    { "id": "cf-weight", "label": "体重(kg)", "aliases": ["体重"], "value": "52" },
+    { "id": "cf-wechat", "label": "微信号", "value": "linruoxi_test", "sensitivity": "medium" }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "createdAt": "2026-11-09T10:00:00+08:00",
+    "updatedAt": "2026-11-09T10:00:00+08:00",
+    "reviewedAt": "2026-11-09T10:30:00+08:00",
+    "source": "manual"
+  },
+  "basic": {
+    "name": "陈思远",
+    "gender": "male",
+    "birthDate": "2002-03-18",
+    "idType": "resident-id",
+    "nationality": "中国",
+    "ethnicity": "汉族",
+    "politicalStatus": "cyl-member",
+    "maritalStatus": "unmarried",
+    "healthStatus": "健康",
+    "heightCm": 175,
+    "nativePlace": { "province": "湖南省", "city": "岳阳市" },
+    "studentOrigin": { "province": "湖南省", "city": "岳阳市" },
+    "hukou": { "province": "湖南省", "city": "岳阳市", "district": "岳阳楼区" },
+    "currentResidence": { "province": "湖南省", "city": "长沙市", "district": "岳麓区" }
+  },
+  "contact": {
+    "mobile": "13800138000",
+    "email": "chen.siyuan.test@example.com",
+    "address": "湖南省长沙市岳麓区麓山南路 2 号"
+  },
+  "education": [
+    {
+      "id": "edu-bachelor-hnu",
+      "level": "bachelor",
+      "degree": "bachelor",
+      "school": "湖南大学",
+      "schoolCountry": "中国",
+      "schoolRegion": { "province": "湖南省", "city": "长沙市" },
+      "college": "工商管理学院",
+      "majorCategory": "管理学/工商管理类",
+      "major": "会计学",
+      "start": "2020-09-01",
+      "end": "2024-06-30",
+      "studyMode": "full-time",
+      "admissionType": "unified",
+      "durationYears": 4,
+      "gpa": "3.71/4.0",
+      "rank": "12/156",
+      "isStudentCadre": "yes",
+      "mainCourses": ["中级财务会计", "审计学", "财务管理", "税法"]
+    },
+    {
+      "id": "edu-master-uom",
+      "level": "master",
+      "degree": "master",
+      "school": "曼彻斯特大学",
+      "schoolCountry": "英国",
+      "college": "艾莉安斯曼彻斯特商学院",
+      "major": "会计与金融",
+      "researchDirection": "财务会计",
+      "start": "2024-09-15",
+      "end": "2025-09-30",
+      "studyMode": "full-time",
+      "admissionType": "non-mainland",
+      "durationYears": 1,
+      "overseasYears": 1
+    }
+  ],
+  "work": [
+    {
+      "id": "work-pwc",
+      "kind": "internship",
+      "company": "普华永道中天会计师事务所（特殊普通合伙）长沙分所",
+      "department": "审计部",
+      "title": "审计实习生",
+      "location": { "province": "湖南省", "city": "长沙市" },
+      "start": "2025-06-16",
+      "end": "present",
+      "description": "参与上市公司年报审计，负责货币资金、应收账款科目底稿编制；协助完成函证统计与抽凭。",
+      "salary": 4000,
+      "hasReferee": "yes"
+    },
+    {
+      "id": "work-ccb",
+      "kind": "internship",
+      "company": "中国建设银行股份有限公司湖南省分行",
+      "department": "运营管理部",
+      "title": "实习生",
+      "location": { "province": "湖南省", "city": "长沙市" },
+      "start": "2023-07-03",
+      "end": "2023-09-01",
+      "description": "协助核对网点日终报表，整理客户资料归档。",
+      "salary": 2500,
+      "hasReferee": "no"
+    }
+  ],
+  "languages": [
+    { "id": "lang-cet6", "language": "英语", "certificate": "CET6", "score": "586", "date": "2022-06", "listenSpeak": "proficient", "readWrite": "expert" },
+    { "id": "lang-ielts", "language": "英语", "certificate": "IELTS", "score": "7.0", "date": "2024-03", "listenSpeak": "proficient", "readWrite": "expert" }
+  ],
+  "certificates": [
+    { "id": "cert-cja", "category": "会计类", "name": "初级会计专业技术资格", "status": "obtained", "date": "2023-05" }
+  ],
+  "skills": [
+    { "id": "skill-excel", "name": "Excel", "level": "expert" },
+    { "id": "skill-sql", "name": "SQL", "level": "proficient" },
+    { "id": "skill-python", "name": "Python", "level": "good" }
+  ],
+  "honors": [
+    { "id": "honor-gjjxj", "name": "国家奖学金", "date": "2022-10", "level": "national", "issuer": "中华人民共和国教育部" },
+    { "id": "honor-yxgb", "name": "湖南大学优秀学生干部", "date": "2023-05", "level": "school", "issuer": "湖南大学" }
+  ],
+  "intention": {
+    "jobTypes": ["审计", "财务分析"],
+    "cities": [
+      { "province": "湖南省", "city": "长沙市" },
+      { "province": "上海市", "city": "上海市" },
+      { "province": "广东省", "city": "深圳市" }
+    ],
+    "salaryMin": 8000,
+    "salaryMax": 12000
+  },
+  "textTemplates": [
+    { "id": "tpl-self", "title": "自我评价", "kind": "self-assessment", "body": "做事细致，熟悉审计流程，有较好的数据处理能力和沟通能力。" }
+  ],
+  "custom": [
+    { "id": "cf-weight", "label": "体重(kg)", "value": "62" }
+  ]
+}

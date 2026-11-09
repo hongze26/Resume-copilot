@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>网申助手 · 档案管理</title>
+    <link rel="stylesheet" href="shared.css" />
+    <link rel="stylesheet" href="profile.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">网申助手 · 档案管理</div>
+      <div id="status" class="status"></div>
+      <div class="actions">
+        <button id="btn-save" class="btn btn-primary" title="Ctrl+S">保存</button>
+        <button id="btn-review" class="btn">我已核对</button>
+        <label class="btn" for="import-file">导入 JSON</label>
+        <input id="import-file" type="file" accept=".json,application/json" hidden />
+        <button id="btn-export" class="btn">导出备份</button>
+        <button id="btn-sample" class="btn">载入示例档案</button>
+        <button id="btn-delete" class="btn btn-danger">删除全部本地数据</button>
+      </div>
+    </header>
+    <div class="banner banner-warn page-banner">
+      档案保存在这台电脑的浏览器里；大模型识别仅在你确认后发送简历文字。<strong>卸载扩展会清除档案</strong>，请先点“导出备份”。
+    </div>
+    <div id="save-info" class="save-info banner" role="status" aria-live="polite" data-testid="save-info"></div>
+    <div id="issues" class="issues"></div>
+    <div class="layout">
+      <aside class="source card">
+        <h2>简历原文对照</h2>
+        <p class="f-hint">选择 PDF 或 Word（.docx）简历，在本机提取文字并<strong>自动识别</strong>（不联网、不保存原件）。识别结果先预览，由你勾选后填入右侧；漏掉的可以选中原文，再点字段旁的“← 填入”。</p>
+        <div class="source-tools">
+          <label class="btn btn-small" for="resume-file">选择简历文件</label>
+          <button id="btn-reparse" type="button" class="btn btn-small" hidden>查看识别结果</button>
+          <input id="resume-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+          <input id="source-search" type="search" placeholder="在原文中查找，回车定位" aria-label="在原文中查找" />
+        </div>
+        <details id="ai-settings" class="ai-settings"></details>
+        <div id="source-info" class="f-hint"></div>
+        <div id="source-text" class="source-text"></div>
+      </aside>
+      <div class="main">
+        <nav id="nav" class="nav" aria-label="档案栏目"></nav>
+        <form id="form" class="form"></form>
+      </div>
+    </div>
+    <script type="module" src="profile.js"></script>
+  </body>
+</html>
