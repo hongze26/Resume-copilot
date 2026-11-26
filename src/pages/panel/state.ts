@@ -42,6 +42,10 @@ export function initialState() { return {
   fallbackGeneric: false,
   frames: undefined as { sameOrigin: number; crossOrigin: number } | undefined,
   pageSections: [] as string[],
+  /** 通用流程里识别到的招聘平台（Moka 等） */
+  platform: undefined as { id: string; name: string; notes: string[]; inlineGroups: boolean } | undefined,
+  /** 通用流程里，这一页的多条记录是否排在同一页（平台提示给的，或按结构推断的） */
+  inlinePage: false,
   profile: null as Profile | null,
   settings: undefined as Settings | undefined,
   scanned: false,
@@ -88,6 +92,8 @@ export const builtinAdapter = () => ADAPTERS.find((a) => a.id === state.adapter?
 export const isGenericFlow = () => !builtinAdapter() || state.fallbackGeneric;
 /** 发给页面的 DOM 适配 id（content/site/index.ts 的 siteDomFor）。 */
 export const domId = () => (isGenericFlow() ? 'generic' : state.adapter!.id);
+/** 多条经历排在同一页的网站：第 N 份表单对应档案第 N 条，不靠“当前绑定的记录”。 */
+export const inlineGroups = () => isGenericFlow() && (state.inlinePage || !!state.platform?.inlineGroups);
 
 /** 用页面上报的区块更新状态；通用流程同时重新组装规则（区块可能因弹窗、翻页而变化）。 */
 export function applySections(list: SectionInfoMsg[]): void {
@@ -117,6 +123,8 @@ export function resetPageState(note: string) {
   state.fallbackGeneric = false;
   state.frames = undefined;
   state.pageSections = [];
+  state.platform = undefined;
+  state.inlinePage = false;
   state.plans.clear();
   state.sections = [];
   state.savedTexts.clear();

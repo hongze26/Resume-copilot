@@ -1,3 +1,4 @@
+import { closest } from './similar';
 import { norm } from './text';
 
 export type OptionMatch =
@@ -12,6 +13,7 @@ export type OptionMatch =
  * - 恰好一个“完全相等/别名相等” → exact
  * - 多个完全相等 → multiple
  * - 只有包含关系 → contains（中置信，列候选）
+ * - 包含关系也没有、但选项完整且有一个字面上明显最接近 → 同样按 contains 处理（中置信）
  * - 没有候选 → none（或在选项不完整时 unknown）
  *
  * excludeAliases：其他规范键的别名。若某选项与其他键完全相等，就不能作为包含关系候选
@@ -40,6 +42,11 @@ export function matchOptions(
     });
     const uniq = [...new Set(contains)];
     if (uniq.length > 0) return { status: 'contains', candidates: uniq, why: '网页选项和档案里的值不完全一样，选了最接近的' };
+    // 选项读全了才比字面相似度：只读到一部分时，更像的那个可能还没出现
+    if (!opts.partial) {
+      const near = closest(aliases, options.filter((o) => norm(o) && !exclude.has(norm(o))));
+      if (near) return { status: 'contains', candidates: [near.option], why: '网页选项里没有一样的，选了字面上最接近的' };
+    }
   }
   return opts.partial ? { status: 'unknown' } : { status: 'none' };
 }

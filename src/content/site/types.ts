@@ -28,6 +28,8 @@ export interface FormContainer {
   section?: SectionHandle;
   formIndex: number;
   el: Element;
+  /** 容器里不归这份表单的部分（已经单独算成一份表单的记录容器） */
+  exclude?: Element[];
 }
 
 export interface SiteDom {

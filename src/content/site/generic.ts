@@ -11,7 +11,8 @@
 import { guessSection, isResumeSectionTitle, sectionCore } from '../../core/matcher/sections';
 import { norm } from '../../core/normalize/text';
 import { isVisible, safeClick, text, waitFor } from '../dom';
-import { readableDocuments } from '../scan';
+import { hintsFor, matchesSafe, q } from '../platform';
+import { labelOf, readableDocuments } from '../scan';
 import type { FormContainer, SectionHandle, SiteDom } from './types';
 
 const HEADING_SEL = 'h1, h2, h3, h4, legend, .section-title, [class*="section-title"], [class*="SectionTitle"], .el-card__header, .ivu-card-head, .arco-card-header';
@@ -61,7 +62,31 @@ export function pageTitle(doc: Document = document): string {
   return '';
 }
 
+/** 区块标题元素里的第一段文字（平台的区块标题里常常还装着“添加”按钮和说明）。 */
+function firstText(el: Element): string {
+  const walker = el.ownerDocument.createTreeWalker(el, 4 /* NodeFilter.SHOW_TEXT */);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const t = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (t) return t;
+  }
+  return '';
+}
+
+/** 标题文字：平台提示指出的区块标题取第一段，其余取全部文字。 */
+function titleOf(h: Element): string {
+  return matchesSafe(h, hintsFor(h.ownerDocument)?.sectionTitle) ? firstText(h) : text(h);
+}
+
 function headingsIn(doc: Document): Element[] {
+  // 平台提示（content/platform）给了区块和标题的位置：直接用，不再按文字猜
+  const hints = hintsFor(doc);
+  if (hints?.section && hints.sectionTitle) {
+    const hs = q(doc, hints.section)
+      .map((b) => q(b, hints.sectionTitle)[0])
+      .filter((h): h is Element => !!h && isVisible(h) && !h.closest(DIALOG_SEL) && !!firstText(h));
+    if (hs.length) return hs;
+  }
   const out = new Set<Element>();
   const ok = (e: Element) => isVisible(e) && !e.closest(NOT_HEADING) && !e.closest(DIALOG_SEL);
   for (const h of Array.from(doc.querySelectorAll(HEADING_SEL))) {
@@ -89,13 +114,15 @@ function headingsIn(doc: Document): Element[] {
 export function resumeSectionTitles(): string[] {
   const titles = readableDocuments()
     .flatMap(headingsIn)
-    .map((h) => sectionCore(text(h)))
+    .map((h) => sectionCore(titleOf(h)))
     .filter((t) => isResumeSectionTitle(t));
   return [...new Set(titles)];
 }
 
 function firstControlBefore(doc: Document, h: Element | undefined): boolean {
-  const c = Array.from(doc.querySelectorAll(CONTROL_SEL)).find((e) => isVisible(e) && !e.closest(DIALOG_SEL));
+  // 平台提示给了“一条记录的容器”时，只有容器里的控件才会被扫描；页头的搜索框不算表单项
+  const groups = q(doc, hintsFor(doc)?.group);
+  const c = Array.from(doc.querySelectorAll(CONTROL_SEL)).find((e) => isVisible(e) && !e.closest(DIALOG_SEL) && (!groups.length || groups.some((g) => g.contains(e))));
   if (!c) return false;
   return !h || !!(c.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
@@ -151,7 +178,7 @@ function computeLayout(): Layout {
       sections.push({ key: keyed('page', title, used), title, el: doc.body });
     }
     for (const h of hs) {
-      const title = sectionCore(text(h)).replace(/[(（](必填|选填)[)）]/, '') || text(h);
+      const title = sectionCore(titleOf(h)).replace(/[(（](必填|选填)[)）]/, '') || titleOf(h);
       sections.push({ key: keyed('t', title, used), title, el: h });
     }
   });
@@ -216,6 +243,81 @@ function controlCount(): number {
   return readableDocuments().reduce((n, d) => n + Array.from(d.querySelectorAll(CONTROL_SEL)).filter(isVisible).length, 0);
 }
 
+// ---------------- 多条记录排在同一页 ----------------
+
+const FIELD_SEL = 'input:not([type=hidden]), textarea, select';
+
+/** 两套字段名大体相同：至少两个相同，相同的占两边合起来的六成以上。 */
+function alike(a: Set<string>, b: Set<string>): boolean {
+  let both = 0;
+  for (const x of a) if (b.has(x)) both++;
+  return both >= 2 && both / (a.size + b.size - both) >= 0.6;
+}
+
+const inferCache = new WeakMap<Document, { at: number; value: Element[] }>();
+
+/**
+ * 没有平台提示时按结构推断“一条记录的容器”：经历类区块里，同一个父元素下并排着几个容器，
+ * 各自装着同一套字段名（学校、专业、学历…各出现一遍）。
+ * 一行两栏的普通表单各栏字段名不同，起止时间的两半字段名只有一个，都不会被当成多条记录。
+ */
+function inferGroups(doc: Document, sections: SectionHandle[]): Element[] {
+  const hit = inferCache.get(doc);
+  if (hit && Date.now() - hit.at < 150) return hit.value;
+  const out: Element[] = [];
+  const controls = Array.from(doc.querySelectorAll(FIELD_SEL)).filter((e) => isVisible(e) && !e.closest(DIALOG_SEL) && !e.closest('[data-rc-overlay]'));
+  const names = new Map<Element, string>();
+  const nameOf = (c: Element) => {
+    let n = names.get(c);
+    if (n === undefined) names.set(c, (n = norm(labelOf(c, c))));
+    return n;
+  };
+  for (const s of controls.length >= 4 ? sections : []) {
+    if (s.el === doc.body || s.el.ownerDocument !== doc || s.key.startsWith('dlg:') || !isRepeat(s)) continue;
+    const own = controls.filter(inRange(s, sections));
+    if (own.length < 4) continue;
+    const mine = new Set(own);
+    const inside = (box: Element) => controls.filter((c) => box.contains(c));
+    // 容器里的控件绝大多数属于这个区块（个别字段名长得像区块标题，会把它后面的控件划到别的区块去）
+    const mostlyMine = (box: Element) => {
+      const all = inside(box);
+      const n = all.filter((c) => mine.has(c)).length;
+      return n > 0 && n >= all.length * 0.8;
+    };
+    // 从区块里第一个控件一层层往上，找“并排的几个容器字段名相同”的那一层
+    for (let a: Element = own[0], p = a.parentElement; p && a !== doc.body && mostlyMine(a); a = p, p = a.parentElement) {
+      const sibs = Array.from(p.children).filter(mostlyMine);
+      if (sibs.length >= 2) {
+        const sets = sibs.map((c) => new Set(inside(c).map(nameOf).filter(Boolean)));
+        const base = sets[sibs.indexOf(a)];
+        const same = sibs.filter((_, i) => alike(base, sets[i]));
+        const covered = own.filter((o) => same.some((c) => c.contains(o))).length;
+        if (same.length >= 2 && covered >= own.length * 0.8) {
+          out.push(...same);
+          break;
+        }
+      }
+      if (own.every((o) => p.contains(o))) break; // 再往上只剩整个区块
+    }
+  }
+  inferCache.set(doc, { at: Date.now(), value: out });
+  return out;
+}
+
+/** 一条记录的容器：平台提示给了就用提示的，否则按结构推断。 */
+function recordGroups(doc: Document, sections: SectionHandle[]): { groups: Element[]; hinted: boolean } {
+  const all = q(doc, hintsFor(doc)?.group).filter((g) => isVisible(g) && !g.closest(DIALOG_SEL));
+  const hinted = all.filter((g) => !all.some((o) => o !== g && o.contains(g)));
+  return hinted.length ? { groups: hinted, hinted: true } : { groups: inferGroups(doc, sections), hinted: false };
+}
+
+/** 这一页是不是“多条记录排在同一页”（侧边栏据此按“第 N 份表单对应档案第 N 条”安排）。 */
+export function hasInlineGroups(): boolean {
+  if (openDialog(document)) return false;
+  const sections = layout().sections;
+  return readableDocuments().some((doc) => recordGroups(doc, sections).groups.length > 0);
+}
+
 export const genericDom: SiteDom = {
   id: 'generic',
   findSections() {
@@ -229,7 +331,21 @@ export const genericDom: SiteDom = {
       return !sectionKey || sec.key === sectionKey ? [{ section: sec, formIndex: 0, el: d }] : [];
     }
     const out: FormContainer[] = [];
-    for (const doc of readableDocuments()) if (doc.body) out.push({ formIndex: 0, el: doc.body });
+    for (const doc of readableDocuments()) {
+      // 多条经历排在同一页（平台提示给了“一条记录的容器”，或按结构推断出来）：每条记录一份表单，按区块内的顺序编号
+      const { groups, hinted } = recordGroups(doc, sections);
+      const count = new Map<string, number>();
+      for (const g of groups) {
+        const sec = this.sectionOf(g, sections);
+        const k = sec?.key ?? 'page';
+        const formIndex = count.get(k) ?? 0;
+        count.set(k, formIndex + 1);
+        if (!sectionKey || sec?.key === sectionKey) out.push({ section: sec, formIndex, el: g });
+      }
+      // 平台提示的容器包住了全部表单项；推断出来的只包住多条记录的区块，其余表单项照旧按整页扫描
+      if (hinted) continue;
+      if (doc.body) out.push({ formIndex: 0, el: doc.body, ...(groups.length ? { exclude: groups } : {}) });
+    }
     return out;
   },
   sectionOf(el, sections) {

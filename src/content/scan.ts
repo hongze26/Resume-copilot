@@ -1,6 +1,10 @@
 // 通用字段扫描：只上报结构（标签、控件类型、是否为空、可见选项），不上报页面上已有的值。
 import type { ControlKind, FieldDescriptor } from '../core/plan/types';
 import { isEl, isTag, isVisible, text } from './dom';
+import { collectGeneric, hintedTitle, leadingTitle, manualNoteOf, redundantInItem } from './generic-scan';
+import { genericMeta, snapshotGeneric } from './generic-kit';
+import { closestSafe, hintsFor } from './platform';
+import { EDITABLE_SEL, isEditable } from './dom';
 import type { FormContainer, SectionHandle, SiteDom } from './site';
 
 export interface Registered {
@@ -44,7 +48,7 @@ const POPUP_SEL =
   '.ant-select-dropdown, .ant-picker-dropdown, .ant-cascader-dropdown, .ant-modal, [data-rc-overlay], .el-select-dropdown, .el-picker-panel, .el-cascader__dropdown, .ivu-select-dropdown, .arco-trigger-popup, .n-base-select-menu';
 
 /** 找控件的“根”：组件库控件的外层，或原生元素自身。 */
-function controlRoots(container: Element, skip?: string): Array<{ el: Element; kind: ControlKind }> {
+function controlRoots(container: Element, skip?: string, exclude?: Element[]): Array<{ el: Element; kind: ControlKind }> {
   const out: Array<{ el: Element; kind: ControlKind }> = [];
   const seen = new Set<Element>();
   const push = (el: Element, kind: ControlKind) => {
@@ -52,10 +56,18 @@ function controlRoots(container: Element, skip?: string): Array<{ el: Element; k
     seen.add(el);
     out.push({ el, kind });
   };
-  const all = container.querySelectorAll(`${HOST_SEL}, input, textarea, select`);
+  // 自研组件（没有专门驱动的组件库）：下拉连同里面的输入框算一个控件，年 + 月下拉合成一个日期控件
+  const generic = collectGeneric(container, HOST_SEL);
+  const all = container.querySelectorAll(`${HOST_SEL}, input, textarea, select, ${EDITABLE_SEL}`);
   for (const el of Array.from(all)) {
     if (el.closest(POPUP_SEL)) continue;
     if (skip && el.closest(skip)) continue;
+    if (exclude?.some((x) => x.contains(el))) continue;
+    // 富文本编辑框（自我评价等长文本）：最外层的可编辑元素算一个长文本栏
+    if (isEditable(el)) {
+      if (!el.parentElement?.closest(EDITABLE_SEL) && !el.closest(HOST_SEL)) push(el, 'textarea');
+      continue;
+    }
     // 嵌套在已登记组件内的元素跳过
     const host = el.parentElement?.closest(HOST_SEL);
     if (host && container.contains(host)) continue;
@@ -63,6 +75,14 @@ function controlRoots(container: Element, skip?: string): Array<{ el: Element; k
     if (lib) {
       push(el, lib[1]);
       continue;
+    }
+    if (isTag(el, 'INPUT')) {
+      if (generic.skip(el)) continue;
+      const gh = generic.host(el);
+      if (gh) {
+        push(gh.el, gh.kind);
+        continue;
+      }
     }
     if (el.classList.contains('ant-select')) {
       push(el, el.classList.contains('ant-cascader') ? 'cascader' : 'select');
@@ -85,6 +105,9 @@ function controlRoots(container: Element, skip?: string): Array<{ el: Element; k
       if (['hidden', 'submit', 'button', 'reset', 'image'].includes(t)) continue;
       if (t === 'file') {
         push(el, 'upload');
+      } else if (t === 'date' || t === 'month' || t === 'datetime-local') {
+        // 浏览器自带的日期框：值必须是 2024-09-01 / 2024-09 的格式，按日期控件处理（不能当文字框写“2024年9月”）
+        push(el, 'date');
       } else if (t === 'radio') {
         // 原生 radio 按 name 归组，用第一个代表整组
         const name = el.name;
@@ -126,7 +149,10 @@ function formItemLabel(el: Element): string {
 }
 
 /** 标签解析：antd 表单项标签 → label[for] → aria → 组件库表单项 → 外层 label → 前一个文本 → placeholder。 */
-function labelOf(el: Element, input: Element | null): string {
+export function labelOf(el: Element, input: Element | null): string {
+  // 平台提示（content/platform）给了表单项和标题的位置时，直接取标题
+  const hinted = hintedTitle(el);
+  if (hinted) return hinted;
   let item = el.closest('.ant-form-item');
   while (item) {
     const lab = item.querySelector(':scope > .ant-row > .ant-form-item-label label, :scope > .ant-form-item-label label');
@@ -172,6 +198,11 @@ function labelOf(el: Element, input: Element | null): string {
       if (own) return own;
     }
   }
+  // 没有明确关联时按结构找：排在控件前面、离它最近的一段短文字（勾选框的文字在它后面，不走这一步）
+  if (!(isTag(el, 'INPUT') && (el.type === 'checkbox' || el.type === 'radio'))) {
+    const lead = leadingTitle(el);
+    if (lead) return lead;
+  }
   const wrapLabel = el.closest('label');
   if (wrapLabel) {
     // 只取 label 自身的文字节点，不含内部下拉的选项文字
@@ -203,7 +234,7 @@ function placeholderOf(el: Element, kind: ControlKind, input: Element | null): s
   if ((kind === 'select' || kind === 'cascader' || kind === 'remote-select') && el.classList.contains('ant-select')) {
     return text(el.querySelector('.ant-select-selection-placeholder')) || undefined;
   }
-  return (input as HTMLInputElement | null)?.placeholder || text(el.querySelector('[class*="placeholder"]')) || undefined;
+  return (input as HTMLInputElement | null)?.placeholder || el.getAttribute('data-placeholder') || el.getAttribute('aria-placeholder') || text(el.querySelector('[class*="placeholder"]')) || undefined;
 }
 
 /** 非 antd 下拉是否为空：输入框里显示的值，或“已选项”元素的文字（排除占位提示）。 */
@@ -217,6 +248,8 @@ function libSelectEmpty(el: Element): boolean {
 }
 
 export function isEmptyControl(el: Element, kind: ControlKind): boolean {
+  if (genericMeta.has(el)) return snapshotGeneric(el) === '';
+  if (isEditable(el)) return el.innerText.trim() === '';
   switch (kind) {
     case 'select':
     case 'remote-select':
@@ -334,24 +367,35 @@ type Container = FormContainer;
 /** 描述一个容器里的全部控件（不登记、不读值）。 */
 function describeContainer(site: SiteDom, sections: SectionHandle[], c: Container, nextKey: () => number): Array<{ d: FieldDescriptor; el: Element; kind: ControlKind }> {
   const out: Array<{ d: FieldDescriptor; el: Element; kind: ControlKind }> = [];
-  const roots = controlRoots(c.el, site.skip);
+  const roots = controlRoots(c.el, site.skip, c.exclude);
   // 同一标签下有多个控件时（“在职时间”的开始/结束），用占位提示区分
   const labelCount = new Map<string, number>();
-  const prelim = roots.map(({ el, kind }) => {
-    const input = primaryInput(el, kind);
-    const label = labelOf(el, input);
-    labelCount.set(label, (labelCount.get(label) ?? 0) + 1);
-    return { el, kind, input, label };
-  });
+  // 同一个表单项里已经有值的附属控件（手机号前的区号、证件号码前的证件类型）不上报
+  const redundant = redundantInItem(roots, (r) => isEmptyControl(r.el, r.kind));
+  const hints = hintsFor(c.el.ownerDocument);
+  const prelim = roots
+    .filter((r) => !redundant.has(r))
+    .map(({ el, kind }) => {
+      const input = primaryInput(el, kind);
+      const label = labelOf(el, input);
+      labelCount.set(label, (labelCount.get(label) ?? 0) + 1);
+      return { el, kind, input, label };
+    });
   prelim.forEach(({ el, kind, input, label }, itemIndex) => {
     if (!isVisible(el)) return;
     const section = c.section ?? site.sectionOf(el, sections);
-    const placeholder = placeholderOf(el, kind, input);
+    const gm = genericMeta.get(el);
+    // 年月组合的占位文字是“年”“月”，不是这一栏的提示
+    const placeholder = gm?.type === 'ym' ? undefined : placeholderOf(el, kind, input);
+    const manualNote = manualNoteOf(el);
+    const hintedItem = closestSafe(el, hints?.item);
     let finalLabel = label;
     if ((labelCount.get(label) ?? 0) > 1 && placeholder && placeholder !== label) finalLabel = `${label}-${placeholder}`;
     const rawId = (input as HTMLElement | null)?.id || (el as HTMLElement).id || site.fieldId?.(el) || undefined;
     const key = `${section?.key ?? 'page'}:${c.formIndex}:${itemIndex}:${nextKey()}`;
     const { options, partial } = visibleOptions(el, kind);
+    // 浏览器自带的日期框才按类型定精度；国聘那种只读的 type=text 显示框（靠日历图标认成日期）不在此列，精度和“至今”由探测得出
+    const nativeDate = isTag(el, 'INPUT') && kind === 'date' && /^(date|month|datetime-local)$/.test(el.type) ? (el.type === 'month' ? ('month' as const) : ('day' as const)) : undefined;
     const d: FieldDescriptor = {
       key,
       label: finalLabel,
@@ -364,12 +408,19 @@ function describeContainer(site: SiteDom, sections: SectionHandle[], c: Containe
       formIndex: c.formIndex,
       itemIndex,
       kind,
-      required: !!el.closest('.ant-form-item')?.querySelector('.ant-form-item-required') || (input as HTMLInputElement | null)?.required === true || el.getAttribute('aria-required') === 'true',
+      required:
+        !!el.closest('.ant-form-item')?.querySelector('.ant-form-item-required') ||
+        (input as HTMLInputElement | null)?.required === true ||
+        el.getAttribute('aria-required') === 'true' ||
+        !!hintedItem?.querySelector('[class*="required"]'),
       disabled: isDisabled(el, input),
       readonly: !!(input as HTMLInputElement | null)?.readOnly,
       isEmpty: isEmptyControl(el, kind),
       options,
       optionsPartial: partial,
+      ...(gm?.type === 'ym' ? { datePrecision: 'month' as const, hasPresentOption: !!gm.present } : {}),
+      ...(nativeDate ? { datePrecision: nativeDate, hasPresentOption: false } : {}),
+      ...(manualNote ? { manualNote } : {}),
       visible: true,
     };
     out.push({ d, el, kind });

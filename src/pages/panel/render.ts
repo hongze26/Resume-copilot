@@ -11,11 +11,13 @@ import { validateProfile } from '../../core/profile/validate';
 import { saveSettings } from '../shared/storage';
 import { clear, downloadText, h, toast } from '../shared/ui';
 import { LEVEL_ZH, COLLECTION_ZH } from './labels';
-import { state, customDefs, setCustomDefs, adapterOverride, pickAdapter, isCustom, currentDef, isGenericFlow, domId, working, resetPageState, type Choice, type FormPlan } from './state';
+import { state, customDefs, setCustomDefs, adapterOverride, pickAdapter, isCustom, currentDef, isGenericFlow, inlineGroups, domId, working, resetPageState, type Choice, type FormPlan } from './state';
+import { pickCandidates } from '../../core/ai-pick';
+import { startAiPick } from './ai-pick-ui';
 import { app, withAnchor } from './scroll';
 import { send, ensureContent } from './bridge';
 import { sectionCollection, orderedRecords, recordTitle, recordStatus, boundRecord } from './records';
-import { doScan, executePlan, undoPlan, retryWithCandidate, openForm } from './flow';
+import { doScan, executePlan, undoPlan, retryWithCandidate, openForm, applyPicks } from './flow';
 import { requestTabAccess, resumePendingActivation } from './tabs';
 
 // ---------------- 渲染 ----------------
@@ -200,7 +202,8 @@ export function renderFormPlan(fp: FormPlan): HTMLElement {
         'div',
         { class: 'exec-bar' },
         h('div', { class: 'target-note' }, `写入目标：${safeHost()}。网站可能自动保存你填写的内容。工具不会点击保存、提交或投递。`),
-        h('button', { class: 'btn btn-primary', disabled: n === 0 || state.busy, onclick: () => void executePlan(fp) }, `填写选中的 ${n} 项`),
+        // 一次只填一份表单：两份同时执行会互相抢下拉弹层
+        h('button', { class: 'btn btn-primary', disabled: n === 0 || working(), onclick: () => void executePlan(fp) }, `填写选中的 ${n} 项`),
       ),
     );
   } else if (fp.state === 'running') {
@@ -280,7 +283,8 @@ export function renderSection(sec: SectionInfoMsg): HTMLElement | null {
           : `档案 ${recs.length} 条 → 页面已识别 ${sec.recordCount} 条已保存记录（识别结果仅供参考）→ 建议添加 ${recs.length - onPage} 条`,
       ),
     );
-    const active = boundRecord(sec.key);
+    const inline = generic && inlineGroups();
+    const active = inline ? undefined : boundRecord(sec.key);
     const list = h('ul', { class: 'records' });
     recs.forEach((r, i) => {
       const st = recordStatus(sec.key, col, r);
@@ -289,9 +293,9 @@ export function renderSection(sec: SectionInfoMsg): HTMLElement | null {
         h(
           'li',
           {
-            class: `record ${st !== 'pending' ? 'record-done' : ''} ${isActive ? 'record-active' : ''} ${generic ? 'record-pick' : ''}`,
-            title: generic ? '用这一条填写当前展开的表单' : undefined,
-            onclick: generic
+            class: inline ? `record ${i < plans.length ? 'record-active' : ''}` : `record ${st !== 'pending' ? 'record-done' : ''} ${isActive ? 'record-active' : ''} ${generic ? 'record-pick' : ''}`,
+            title: generic && !inline ? '用这一条填写当前展开的表单' : undefined,
+            onclick: generic && !inline
               ? () => {
                   state.doneRecords.delete(r.id);
                   state.activeRecord.set(sec.key, r.id);
@@ -300,13 +304,18 @@ export function renderSection(sec: SectionInfoMsg): HTMLElement | null {
               : undefined,
           },
           h('span', {}, h('span', { class: 'record-title' }, `第 ${i + 1} 条：${recordTitle(col, r)}`)),
-          h('span', { class: 'small muted' }, st === 'done' ? '本次已保存' : st === 'on-page' ? '页面中已存在' : isActive ? '当前' : '待填写'),
+          h('span', { class: 'small muted' }, inline ? (i < plans.length ? `网页上第 ${i + 1} 份表单` : '网页上还没有对应的表单') : st === 'done' ? '本次已保存' : st === 'on-page' ? '页面中已存在' : isActive ? '当前' : '待填写'),
         ),
       );
     });
     if (recs.length === 0) list.append(h('li', { class: 'small muted' }, `档案中没有${COLLECTION_ZH[col] ?? ''}记录`));
     card.append(list);
-    if (generic) {
+    if (inline) {
+      card.append(h('p', { class: 'small muted' }, '这个网站的多条经历排在同一页：网页上第 N 份表单对应档案第 N 条。'));
+      if (recs.length > plans.length && sec.hasAdd) {
+        card.append(h('button', { class: 'btn', 'data-testid': 'inline-add', disabled: state.busy, onclick: () => void openForm(sec.key) }, `在网页上点“添加”并重新扫描（还差 ${recs.length - plans.length} 条）`));
+      }
+    } else if (generic) {
       if (plans.length > 0) {
         if (recs.length > 1) card.append(h('p', { class: 'small muted' }, '点上面的某一条，可改用那一条填写当前展开的表单。'));
       } else if (active && sec.hasAdd) {
@@ -352,6 +361,9 @@ export function renderGenericHeader(): HTMLElement {
           : '通用识别：按字段名称对应档案。“高”默认勾选，“中”需要你选定，其余不填写；填写前请逐项核对。',
     ),
   );
+  if (state.platform?.notes.length) {
+    card.append(h('div', { class: 'banner banner-info small', 'data-testid': 'platform-note' }, `识别到 ${state.platform.name} 的表单：`, h('ul', { class: 'notes' }, ...state.platform.notes.map((n) => h('li', {}, n)))));
+  }
   if (state.pageSections.length) {
     card.append(h('div', { class: 'small', 'data-testid': 'page-sections' }, `页面上识别到的简历区块：${state.pageSections.join('、')}`));
   }
@@ -510,6 +522,20 @@ export function renderInto(): void {
   if (state.scanned) {
     const generic = isGenericFlow();
     if (generic) app.append(renderGenericHeader());
+    // 可选：下拉的选项里找不到档案里的值时，请大模型从选项里挑（设置里打开；每次发送前确认）
+    if (state.settings?.aiEnumPick) {
+      const reqs = pickCandidates([...state.plans.values()].filter((p) => p.state === 'preview').flatMap((p) => p.items), state.fields);
+      if (reqs.length) {
+        app.append(
+          h(
+            'div',
+            { class: 'banner banner-info small', 'data-testid': 'ai-pick-offer' },
+            `有 ${reqs.length} 个下拉的选项里找不到档案里的值。`,
+            h('button', { class: 'btn btn-small', style: 'margin-left:6px', disabled: state.busy, onclick: () => void startAiPick(reqs, (picks) => (toast(`大模型挑出 ${applyPicks(reqs, picks)} 项，已标为“中”，请核对`, 'ok', 5000), render())) }, '让大模型从选项里挑'),
+          ),
+        );
+      }
+    }
     const shown = state.sections.map(renderSection).filter((x): x is HTMLElement => !!x);
     if (shown.length === 0 && !generic) app.append(h('div', { class: 'banner banner-warn' }, '没有识别到简历区块。请确认打开的是“申请简历”页面。'));
     app.append(...shown);
@@ -563,7 +589,7 @@ export function renderAdapterBar(): HTMLElement {
     h('button', { class: `chip${state.adapter?.id === id ? ' chip-active' : ''}${matched ? '' : ' chip-other'}`, title, disabled: working(), onclick: () => useAdapter(id) }, label);
   chips.append(builtin ? chip(builtin.id, builtin.name, `内置适配器：${builtin.name}`, true) : chip('generic', '通用识别', '没有专用适配器时使用：按字段名称识别，预览确认后填写', true));
   for (const d of customDefs) chips.append(chip(d.id, d.name, `定制适配器，用于 ${d.hosts.join('、')}`, d.hosts.includes(safeHost())));
-  chips.append(h('button', { class: 'chip chip-add', disabled: !httpPage || working(), title: '读取当前页面的表单结构，用大模型生成字段对应关系', onclick: () => void generateCustom() }, '＋ 生成定制适配器'));
+  chips.append(h('button', { class: 'chip chip-add', disabled: !httpPage || working(), title: '读取当前页面的表单结构，生成这个网站专用的字段对应表（可按本机规则生成，也可用大模型）', onclick: () => void generateCustom() }, '＋ 生成定制适配器'));
   bar.append(chips);
   // 也可以输入招聘页面网址：在新标签页打开（需要登录的页面请先登录），打开后在那个页面上点“生成定制适配器”
   const urlInput = h('input', { type: 'url', placeholder: '招聘申请页网址（以 https 开头）', 'aria-label': '招聘页面网址' }) as HTMLInputElement;
@@ -609,16 +635,20 @@ export function renderAdapterBar(): HTMLElement {
 export function renderSettings(): HTMLElement {
   const det = h('details', { class: 'card collapsible', 'data-anchor': 'settings' }) as HTMLDetailsElement;
   det.append(h('summary', {}, '设置'));
-  const toggle = (key: 'writebackPrompt' | 'followPage', label: string) => {
-    const cb = h('input', { type: 'checkbox', checked: state.settings?.[key] !== false }) as HTMLInputElement;
+  const toggle = (key: 'writebackPrompt' | 'followPage' | 'aiEnumPick', label: string) => {
+    const on = key === 'aiEnumPick' ? state.settings?.[key] === true : state.settings?.[key] !== false;
+    const cb = h('input', { type: 'checkbox', checked: on, 'data-setting': key }) as HTMLInputElement;
     cb.addEventListener('change', async () => {
       if (!state.settings) return;
       state.settings = { ...state.settings, [key]: cb.checked };
       await saveSettings(state.settings);
+      if (key === 'aiEnumPick') render();
     });
     return h('label', { class: 'setting-row small' }, cb, ' ', label);
   };
-  det.append(toggle('writebackPrompt', '在网页上点“保存”时，询问是否把页面内容存回档案'), toggle('followPage', '侧边栏跟随网页滚动到对应区块'));
+  det.append(toggle('writebackPrompt', '在网页上点“保存”时，询问是否把页面内容存回档案'), toggle('followPage', '侧边栏跟随网页滚动到对应区块'),
+    toggle('aiEnumPick', '下拉的选项里找不到档案里的值时，可以让大模型从选项里挑（每次发送前给你看内容；不发姓名、联系方式、证件）'),
+  );
   return det;
 }
 

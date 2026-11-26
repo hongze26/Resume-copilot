@@ -39,6 +39,11 @@ textarea {
   color: inherit;
 }
 
+/* .btn 等自带 display，会盖掉 hidden 属性 */
+[hidden] {
+  display: none !important;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

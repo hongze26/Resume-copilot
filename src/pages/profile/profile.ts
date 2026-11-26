@@ -4,6 +4,7 @@ import { migrateToCurrent, MigrationError } from '../../core/profile/migrate';
 import type { Profile } from '../../core/profile/types';
 import { canonicalJson, sameJson } from '../../core/profile/compare';
 import { validateProfile, type ValidationIssue } from '../../core/profile/validate';
+import { MAX_IMAGES, MAX_IMAGE_CHARS } from '../../core/resume/ai';
 import { applyParsed, COLLECTION_ZH, getIn, isEmptyValue, sameRecord } from '../../core/resume/apply';
 import { parseResumeText, type ParsedField, type ParsedRecord, type ParseResult } from '../../core/resume/parse';
 import { initAi } from './ai-settings';
@@ -707,6 +708,16 @@ function showParsePreview(r: ParseResult) {
   if (!r.fields.length && !r.records.length) {
     body.append(h('div', { class: 'banner banner-warn' }, '没有识别出可以填入的内容。可以在左侧原文中选中文字，用字段旁的“← 填入”手动填写。'));
   }
+  if (r.dropped?.length) {
+    body.append(
+      h(
+        'details',
+        { class: 'small parse-dropped', 'data-testid': 'parse-dropped' },
+        h('summary', { class: 'warn-text' }, `有 ${r.dropped.length} 项没有填入（格式不对，或在原文里找不到依据），需要的话请手动填写`),
+        h('ul', {}, ...r.dropped.map((d) => h('li', {}, d))),
+      ),
+    );
+  }
   if (r.unparsed.length) {
     body.append(
       h('details', { class: 'small' }, h('summary', {}, `没有归入字段的行（${r.unparsed.length}），需要的话请手动填写`), h('pre', { class: 'source-pre' }, r.unparsed.join('\n'))),
@@ -749,27 +760,92 @@ function showParsePreview(r: ParseResult) {
   dlg.showModal();
 }
 
+/** 左栏显示可对照的文字；疑似证件号、手机号标红。 */
+async function showSource(text: string, info: string, warning?: string) {
+  const { sensitiveRanges } = await import('./resume-parse');
+  sourceInfo.textContent = info;
+  clear(sourceEl);
+  if (warning) sourceEl.append(h('div', { class: 'banner banner-warn' }, warning));
+  const pre = h('pre', { class: 'source-pre', 'data-testid': 'source-pre' });
+  let pos = 0;
+  for (const [s, e] of sensitiveRanges(text)) {
+    if (s < pos) continue;
+    pre.append(text.slice(pos, s), h('mark', { class: 'sensitive', title: '可能是证件号或手机号：不会自动写入档案，请自行核对后复制' }, text.slice(s, e)));
+    pos = e;
+  }
+  pre.append(text.slice(pos));
+  sourceEl.append(pre);
+  (document.getElementById('btn-reparse') as HTMLButtonElement | null)?.removeAttribute('hidden');
+}
+
+// ---------------- 截图 / 补充内容识别 ----------------
+
+function initQuick(ai: Awaited<ReturnType<typeof initAi>>, pending: { extra: string }) {
+  const list = document.getElementById('shot-list')!;
+  const textEl = document.getElementById('quick-text') as HTMLTextAreaElement;
+  const fileEl = document.getElementById('shot-file') as HTMLInputElement;
+  const runBtn = document.getElementById('quick-run') as HTMLButtonElement;
+  const cancelBtn = document.getElementById('quick-cancel') as HTMLButtonElement;
+  const status = document.getElementById('quick-status')!;
+  let shots: string[] = [];
+  const say = (msg: string) => (status.textContent = msg);
+  const render = () => {
+    clear(list);
+    shots.forEach((src, i) => list.append(h('span', { class: 'shot-item' }, h('img', { src, alt: `截图 ${i + 1}` }), h('button', { type: 'button', title: '移除这张截图', 'aria-label': `移除截图 ${i + 1}`, onclick: () => { shots = shots.filter((_, j) => j !== i); render(); } }, '×'))));
+  };
+  const add = async (files: File[]) => {
+    for (const f of files) {
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) { say(`${f.name || '这个文件'} 不是 PNG、JPG 或 WebP 图片`); continue; }
+      if (shots.length >= MAX_IMAGES) { say(`一次最多 ${MAX_IMAGES} 张截图`); break; }
+      const url = await new Promise<string>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(String(fr.result));
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(f);
+      }).catch(() => '');
+      if (!url) { say('图片读取失败'); continue; }
+      if (shots.reduce((n, u) => n + u.length, url.length) > MAX_IMAGE_CHARS) { say('截图总大小超出限制，请减少张数或裁剪后再试'); break; }
+      shots = [...shots, url];
+      say(`已加入 ${shots.length} 张截图，点“识别并生成”。截图只在本页内存里，不会保存。`);
+    }
+    render();
+  };
+  fileEl.addEventListener('change', () => { void add([...(fileEl.files ?? [])]); fileEl.value = ''; });
+  // 在页面任何位置粘贴图片都收下；粘贴文字不受影响
+  document.addEventListener('paste', (e) => {
+    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    e.preventDefault();
+    void add(files);
+  });
+  cancelBtn.addEventListener('click', ai.abort);
+  runBtn.addEventListener('click', () => {
+    const extra = textEl.value.trim();
+    if (!shots.length && !extra) { say('请先粘贴截图或写几行补充内容'); return; }
+    if (!shots.length) {
+      // 只有文字：本机规则识别，不联网
+      lastParse = parseResumeText(extra);
+      void showSource(extra, '你写的补充内容。已在本机识别；识别不全时可展开下方“大模型辅助识别（API）”再识别，或选中文字后点右侧字段旁的“← 填入”。');
+      say(lastParse.fields.length || lastParse.records.length ? '已在本机识别，请在预览里核对。' : '本机规则没有识别出内容：写成“字段名：内容”一行一项更容易识别，或改用大模型识别。');
+      showParsePreview(lastParse);
+      return;
+    }
+    const sent = shots;
+    pending.extra = extra;
+    ai.start({ text: extra, images: sent, say, busy: (on) => { runBtn.disabled = on; cancelBtn.hidden = !on; }, stale: () => shots !== sent || textEl.value.trim() !== extra });
+  });
+}
+
 async function doParse(file: File) {
   lastParse = null;
   document.getElementById('btn-reparse')!.hidden = true;
   sourceInfo.textContent = '正在提取文字…';
   clear(sourceEl);
   try {
-    const { extractText, sensitiveRanges } = await import('./resume-parse');
+    const { extractText } = await import('./resume-parse');
     const r = await extractText(file);
-    sourceInfo.textContent = `${file.name}${r.pages ? ` · ${r.pages} 页` : ''}。已自动识别；也可以选中文字后点右侧字段旁的“← 填入”。文件不会被保存。`;
     lastParse = parseResumeText(r.text);
-    (document.getElementById('btn-reparse') as HTMLButtonElement | null)?.removeAttribute('hidden');
-    if (r.warning) sourceEl.append(h('div', { class: 'banner banner-warn' }, r.warning));
-    const pre = h('pre', { class: 'source-pre', 'data-testid': 'source-pre' });
-    let pos = 0;
-    for (const [s, e] of sensitiveRanges(r.text)) {
-      if (s < pos) continue;
-      pre.append(r.text.slice(pos, s), h('mark', { class: 'sensitive', title: '可能是证件号或手机号：不会自动写入档案，请自行核对后复制' }, r.text.slice(s, e)));
-      pos = e;
-    }
-    pre.append(r.text.slice(pos));
-    sourceEl.append(pre);
+    await showSource(r.text, `${file.name}${r.pages ? ` · ${r.pages} 页` : ''}。已自动识别；也可以选中文字后点右侧字段旁的“← 填入”。文件不会被保存。`, r.warning);
     if (lastParse && !r.warning) showParsePreview(lastParse);
   } catch (e) {
     sourceInfo.textContent = e instanceof Error ? e.message : String(e);
@@ -835,7 +911,13 @@ async function init() {
   renderForm();
   renderStatus();
   markReady();
-  void initAi(() => sourceEl.querySelector('pre')?.textContent ?? '', (r) => { lastParse = r; showParsePreview(r); });
+  const pending = { extra: '' };
+  void initAi(() => sourceEl.querySelector('pre')?.textContent ?? '', (r, transcript) => {
+    lastParse = r;
+    // 截图识别：把模型转写的文字放到左栏，供对照截图和手动“← 填入”
+    if (transcript !== undefined) void showSource(pending.extra ? `${transcript}\n\n【你补充的内容】\n${pending.extra}` : transcript, '大模型从截图转写的文字，可能有错字，请对照截图核对。截图不会被保存。');
+    showParsePreview(r);
+  }).then((ai) => initQuick(ai, pending));
   formEl.addEventListener('submit', (e) => e.preventDefault());
   document.getElementById('btn-save')!.addEventListener('click', () => void doSave());
   document.getElementById('btn-review')!.addEventListener('click', () => void doReview());
