@@ -1,8 +1,8 @@
 {
   "name": "resume-copilot",
-  "version": "0.9.0",
+  "version": "0.12.0",
   "private": true,
-  "description": "网申助手：本地档案 + 招聘网站申请表辅助填写（国聘、智联校园专用适配，其他网站通用识别；Chrome/Edge MV3 扩展）",
+  "description": "网申助手：本地档案 + 招聘网站申请表辅助填写（国聘、智联校园专用适配，Moka 等自研组件的网站和其他网站通用识别；Chrome/Edge MV3 扩展）",
   "type": "module",
   "scripts": {
     "gen:validator": "node scripts/gen-validator.mjs",
