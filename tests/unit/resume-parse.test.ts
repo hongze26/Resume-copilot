@@ -83,7 +83,8 @@ describe('简历解析：标准版（“键：值” + 竖线/空格分隔）', 
   });
 
   it('自我评价原样保存为长文本模板', () => {
-    expect(recs(r, 'textTemplates')[0]).toMatchObject({ kind: 'self-assessment', body: '做事认真细致,有较强的数据分析能力和团队协作意识。' });
+    // 原样保存：保留原文的中文逗号（以前会被换成英文逗号）
+    expect(recs(r, 'textTemplates')[0]).toMatchObject({ kind: 'self-assessment', body: '做事认真细致，有较强的数据分析能力和团队协作意识。' });
   });
 });
 

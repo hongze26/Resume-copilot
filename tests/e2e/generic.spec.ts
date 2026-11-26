@@ -106,3 +106,42 @@ test('通用识别：只读展示的区块点“编辑”后扫描填写；经�
   expect(st.submitEvents).toBe(0);
   expect(st.eduEditClicks).toBe(0);
 });
+
+test('原生日期框（type=date / type=month）：按日期框要求的格式填写，只写到月的按 1 日补齐', async ({ context, extensionId }) => {
+  await setProfile(context, extensionId, sampleProfile());
+  const { page, panel } = await openWithPanel(context, extensionId, `${NATIVE}dates.html`);
+  await panel.click('#scan');
+  await expect(panel.getByTestId('generic-result')).toBeVisible({ timeout: 30_000 });
+  const basic = panel.locator('.section-card', { hasText: '个人信息' });
+  await expect(basic.locator('.form-plan')).toBeVisible();
+  await page.bringToFront();
+  await basic.getByRole('button', { name: /填写选中的/ }).click();
+  await expect(basic.locator('.results')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#name')).toHaveValue('林示例');
+  // 档案只写到月（2003-05），日期框要到日：按 1 日填
+  await expect(page.locator('#birth')).toHaveValue('2003-05-01');
+  const edu = panel.locator('.section-card', { hasText: '教育经历' });
+  await edu.locator('.section-head').click();
+  await expect(edu.locator('.form-plan')).toBeVisible();
+  await edu.getByRole('button', { name: /填写选中的/ }).click();
+  await expect(edu.locator('.results')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#es')).toHaveValue('2021-09');
+  await expect(page.locator('#ee')).toHaveValue('2025-06');
+  expect(await page.evaluate(() => (window as unknown as { __submits?: number }).__submits ?? 0)).toBe(0);
+});
+
+test('富文本编辑框（contenteditable）：识别为长文本栏，按输入方式写入，编辑器能收到', async ({ context, extensionId }) => {
+  const profile = sampleProfile() as { textTemplates: Array<{ body: string }> };
+  await setProfile(context, extensionId, profile);
+  const { page, panel } = await openWithPanel(context, extensionId, `${NATIVE}richtext.html`);
+  await panel.click('#scan');
+  await expect(panel.getByTestId('generic-result')).toBeVisible({ timeout: 30_000 });
+  const self = panel.locator('.section-card', { hasText: '自我评价' });
+  await expect(self.locator('.form-plan')).toBeVisible();
+  await page.bringToFront();
+  await self.getByRole('button', { name: /填写选中的/ }).click();
+  await expect(self.locator('.results')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#self')).toHaveText(profile.textTemplates[0].body);
+  expect(await page.evaluate(() => (window as unknown as { __editorValue: string }).__editorValue)).toBe(profile.textTemplates[0].body);
+  expect(await page.evaluate(() => (window as unknown as { __submits?: number }).__submits ?? 0)).toBe(0);
+});

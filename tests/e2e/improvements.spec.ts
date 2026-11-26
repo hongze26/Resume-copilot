@@ -50,6 +50,81 @@ test('API 识别：确认前不发送，结果预览后合并，密钥不进本�
   await expect(page.locator('#projects-0-duty')).toHaveValue('编写 SQL 并核对报表。');
 });
 
+test('API 识别：模型结果里一项不合格只丢这一项，写法偏差自动规整，预览里列出没填入的原因', async ({ context, extensionId }) => {
+  const source = ['姓名：周测试', '性别：男', '教育经历', '2019.09-2023.06 湖南大学 会计学 本科'].join('\n');
+  // 学历写成中文、日期写成 2019.09（会被规整）；政治面貌编造、原文里没有（只丢这一项）
+  const result = {
+    profile: { basic: { name: '周测试', gender: '男', politicalStatus: 'cpc-member' }, education: [{ school: '湖南大学', major: '会计学', level: '本科', start: '2019.09', end: '2023.06' }] },
+    sources: { 'basic.name': '姓名：周测试', 'basic.gender': '性别：男', 'basic.politicalStatus': '政治面貌：中共党员', 'education.0': '2019.09-2023.06 湖南大学 会计学 本科' },
+  };
+  await context.route(`${FIXTURE}/v1/chat/completions`, (route) => route.fulfill({ json: { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(result) } }] } }));
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/profile.html`);
+  await page.locator('#resume-file').setInputFiles(writeTemp('ai-partial.docx', makeDocx(source.split('\n'))));
+  await page.getByTestId('parse-dialog').getByRole('button', { name: '取消', exact: true }).click();
+  await page.locator('#ai-settings summary').click();
+  await page.getByRole('textbox', { name: 'API 地址', exact: true }).fill(`${FIXTURE}/v1`);
+  await page.getByRole('textbox', { name: '模型名称', exact: true }).fill('fixture-model');
+  await page.getByRole('button', { name: '大模型识别', exact: true }).click();
+  await page.getByRole('button', { name: '确认发送并识别' }).click();
+  const dlg = page.getByTestId('parse-dialog');
+  await expect(dlg).toContainText('湖南大学');
+  await expect(dlg.getByTestId('parse-dropped')).toContainText('有 1 项没有填入');
+  await dlg.getByTestId('parse-dropped').locator('summary').click();
+  await expect(dlg.getByTestId('parse-dropped')).toContainText('政治面貌');
+  await expect(page.getByTestId('ai-status')).toContainText('1 项没有填入');
+  await page.getByTestId('parse-apply').click();
+  await expect(page.locator('#basic-name')).toHaveValue('周测试');
+  await expect(page.locator('#basic-gender')).toHaveValue('male');
+  await expect(page.locator('#basic-politicalStatus')).toHaveValue('');
+  await expect(page.locator('#education-0-level')).toHaveValue('bachelor');
+  await expect(page.locator('#education-0-start')).toHaveValue('2019-09');
+});
+
+test('截图识别：确认前不发送，图片和补充文字一起发给大模型，转写文字显示在左栏', async ({ context, extensionId }) => {
+  const result = { text: '姓名 周截图\n民族 汉族', profile: { basic: { name: '周截图', ethnicity: '汉族', heightCm: 165 } }, sources: { 'basic.name': '姓名 周截图', 'basic.ethnicity': '民族 汉族', 'basic.heightCm': '身高 165' } };
+  let calls = 0;
+  await context.route(`${FIXTURE}/v1/chat/completions`, async (route) => {
+    calls++;
+    const content = route.request().postDataJSON().messages[1].content;
+    expect(content[0].text).toContain('身高 165');
+    expect(content[1].image_url.url).toMatch(/^data:image\/png;base64,/);
+    await route.fulfill({ json: { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(result) } }] } });
+  });
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/profile.html`);
+  await page.locator('#ai-settings summary').click();
+  await page.getByRole('textbox', { name: 'API 地址', exact: true }).fill(`${FIXTURE}/v1`);
+  await page.getByRole('textbox', { name: '模型名称', exact: true }).fill('fixture-vision');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('#shot-file').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: png });
+  await expect(page.getByTestId('shot-list').locator('img')).toHaveCount(1);
+  await page.getByTestId('quick-text').fill('身高 165');
+  await page.getByTestId('quick-run').click();
+  await expect(page.getByTestId('ai-consent')).toContainText('1 张截图');
+  expect(calls).toBe(0);
+  await page.getByRole('button', { name: '确认发送并识别' }).click();
+  await expect(page.getByTestId('parse-dialog')).toContainText('周截图');
+  expect(calls).toBe(1);
+  await page.getByTestId('parse-apply').click();
+  await expect(page.locator('#basic-name')).toHaveValue('周截图');
+  await expect(page.locator('#basic-heightCm')).toHaveValue('165');
+  await expect(page.getByTestId('source-pre')).toContainText('民族 汉族');
+  await expect(page.getByTestId('source-pre')).toContainText('身高 165');
+});
+
+test('只写补充文字：本机识别，不联网', async ({ context, extensionId, requests }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/profile.html`);
+  await page.getByTestId('quick-text').fill('姓名：吴补充\n邮箱：wu.test@example.com');
+  await page.getByTestId('quick-run').click();
+  await expect(page.getByTestId('parse-dialog')).toContainText('吴补充');
+  await page.getByTestId('parse-apply').click();
+  await expect(page.locator('#basic-name')).toHaveValue('吴补充');
+  await expect(page.getByTestId('source-pre')).toContainText('wu.test@example.com');
+  expect(externalRequests(requests)).toEqual([]);
+});
+
 test('项目经历：分字段填写，长文本需选择，不自动保存', async ({ context, extensionId }) => {
   const p = sampleProfile();
   p.projects = [{ id: 'proj-demo', name: '数据看板', role: '核心成员', organization: '示例科技', start: '2024-01', end: '2024-06', introduction: '为运营人员提供数据看板。', duty: '编写 SQL 并核对报表。', achievement: '交付 3 张看板。' }];

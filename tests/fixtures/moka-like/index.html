@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>本地夹具 · 自研组件申请表（moka-like）</title>
+    <style>
+      body { font-family: system-ui, "Microsoft YaHei", sans-serif; max-width: 860px; margin: 24px auto; font-size: 14px; }
+      [class^="apply-block-"], .fm-block { margin: 18px 0; padding: 12px; border: 1px solid #ddd; }
+      [class^="blockTitle-"], .fm-head { font-weight: 600; font-size: 16px; margin-bottom: 8px; }
+      .add-btn { float: right; color: #1677ff; cursor: pointer; font-weight: 400; font-size: 14px; }
+      .tip { font-weight: 400; font-size: 12px; color: #888; }
+      [class^="apply-fields-"], .fm-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; padding: 8px 0; border-top: 1px dashed #eee; }
+      [class^="title-"], .fm-title { color: #555; margin-bottom: 4px; }
+      label[class*="Input-container"], label.x-input { display: flex; align-items: center; border: 1px solid #bbb; border-radius: 4px; padding: 4px 8px; min-height: 22px; position: relative; }
+      label[class*="Input-container"] input, label[class*="Input-container"] textarea, label.x-input input, label.x-input textarea { border: 0; outline: 0; flex: 1; min-width: 20px; background: transparent; font: inherit; }
+      [class*="display-value"], .x-value { position: absolute; left: 8px; pointer-events: none; }
+      [class*="Menu-content-item"], .x-opt { padding: 4px 10px; cursor: pointer; }
+      [class*="Menu-content-item"]:hover, .x-opt:hover { background: #eef; }
+      .empty-tip { padding: 6px 10px; color: #999; }
+      [class^="month-range"], .x-range { display: flex; align-items: center; gap: 6px; }
+      [class^="month-range"] > div, .x-range > div { width: 84px; }
+      .phone-wrapper { display: flex; gap: 6px; }
+      .phone-wrapper > div { width: 80px; }
+      .phone-wrapper > label { flex: 1; }
+      .submit-btn { margin: 16px auto; display: block; padding: 6px 24px; }
+    </style>
+  </head>
+  <body>
+    <!-- 页头的搜索框：排在第一个区块标题之前，不属于申请表 -->
+    <div class="top-bar"><input type="text" placeholder="搜索职位" /></div>
+    <h1 style="font-size:18px">示例集团 · 校园招聘 · 职位申请</h1>
+    <form id="form"></form>
+    <script src="app.js"></script>
+  </body>
+</html>

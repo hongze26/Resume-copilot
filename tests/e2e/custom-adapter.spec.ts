@@ -153,3 +153,32 @@ test('定制适配器：网站独有字段对应到档案自定义字段；复�
   expect(base.type).toBe('校园招聘');
   expect(st.saveClicks).toBe(0);
 });
+
+test('定制适配器：不配置大模型，按本机规则生成；复核时显示推测，保存后可填写', async ({ context, extensionId, requests }) => {
+  const profile = sampleProfile() as { basic: { name: string }; contact: { email: string } };
+  await setProfile(context, extensionId, profile);
+  const { page, panel } = await openWithPanel(context, extensionId, `${FIXTURE}/native/`);
+  const bar = panel.getByTestId('adapter-bar');
+  await bar.getByRole('button', { name: /生成定制适配器/ }).click();
+  const consent = panel.getByTestId('custom-consent');
+  await expect(consent).toBeVisible({ timeout: 30_000 });
+  await consent.getByTestId('custom-local').click();
+  const review = panel.getByTestId('custom-review');
+  await expect(review).toBeVisible();
+  // 把握大的直接对应；区块栏目按标题判断
+  await expect(review.getByRole('combobox', { name: '个人信息·姓名' })).toHaveValue('basic.name');
+  await expect(review.getByRole('combobox', { name: '教育经历 的栏目' })).toHaveValue('education');
+  await review.getByRole('textbox', { name: '适配器名称' }).fill('本机生成的站');
+  await review.getByRole('button', { name: '保存适配器' }).click();
+  await expect(bar.getByRole('button', { name: '本机生成的站' })).toHaveClass(/chip-active/);
+
+  await panel.locator('#scan').click();
+  await expect(panel.locator('#scan')).toHaveText('重新扫描本页', { timeout: 60_000 });
+  const basic = panel.locator('.section-card').filter({ hasText: '个人信息' });
+  await page.bringToFront();
+  await basic.getByRole('button', { name: /填写选中的/ }).click();
+  await expect(basic.locator('.results')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#name')).toHaveValue(profile.basic.name);
+  // 全程没有请求任何大模型接口
+  expect(requests.some((r) => r.url().includes('/chat/completions'))).toBe(false);
+});

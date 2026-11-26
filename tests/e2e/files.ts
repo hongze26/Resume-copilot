@@ -57,8 +57,16 @@ function zipStore(files: Array<{ name: string; data: Buffer }>): Buffer {
 }
 
 export function makeDocx(paragraphs: string[]): Buffer {
+  return makeDocxDoc(paragraphs);
+}
+
+/** 段落（字符串）和表格（行 × 单元格）混排的 DOCX，用来测试表格式简历。 */
+export function makeDocxDoc(blocks: Array<string | string[][]>): Buffer {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const body = paragraphs.map((p) => `<w:p><w:r><w:t xml:space="preserve">${esc(p)}</w:t></w:r></w:p>`).join('');
+  const para = (p: string) => `<w:p><w:r><w:t xml:space="preserve">${esc(p)}</w:t></w:r></w:p>`;
+  const table = (rows: string[][]) =>
+    `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>${rows.map((r) => `<w:tr>${r.map((c) => `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${c.split('\n').map(para).join('')}</w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`;
+  const body = blocks.map((b) => (typeof b === 'string' ? para(b) : table(b))).join('');
   return zipStore([
     {
       name: '[Content_Types].xml',
