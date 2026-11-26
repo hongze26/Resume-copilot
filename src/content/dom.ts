@@ -90,6 +90,13 @@ export function isEl(n: unknown): n is HTMLElement {
   return !!n && (n as Node).nodeType === 1;
 }
 
+/** 富文本编辑框（Quill、wangEditor 一类）：contenteditable 的元素。 */
+export const EDITABLE_SEL = '[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]';
+
+export function isEditable(el: Element): el is HTMLElement {
+  return !isTag(el, 'INPUT') && !isTag(el, 'TEXTAREA') && el.matches(EDITABLE_SEL);
+}
+
 export function isVisible(el: Element | null | undefined): boolean {
   if (!el || !(el as HTMLElement).isConnected) return false;
   if ((el as HTMLElement).closest('.ant-form-item-hidden')) return false;

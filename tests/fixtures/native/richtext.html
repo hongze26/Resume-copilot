@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>本地夹具 · 富文本编辑框（native/richtext）</title>
+    <style>body{font-family:system-ui,"Microsoft YaHei",sans-serif;max-width:720px;margin:24px auto} .form-item{margin:10px 0} .ql-editor{min-height:60px;border:1px solid #ccc;padding:6px}</style>
+  </head>
+  <body>
+    <!-- 有的招聘系统用富文本编辑框（Quill、wangEditor 一类，contenteditable 的 div）收自我评价，不是 textarea -->
+    <form id="f" onsubmit="window.__submits=(window.__submits||0)+1;return false;">
+      <h2>个人信息</h2>
+      <div class="form-item"><div class="label">姓名</div><input id="name" type="text" /></div>
+      <h2>自我评价</h2>
+      <div class="form-item">
+        <div class="label">自我评价</div>
+        <div class="ql-container"><div class="ql-editor" id="self" contenteditable="true" data-placeholder="请输入"><p><br /></p></div></div>
+      </div>
+      <button type="submit">提交</button>
+    </form>
+    <script>
+      // 模拟编辑器：只认 input 事件里的内容（和真实编辑器一样，直接改 DOM 不会进它的数据）
+      window.__editorValue = '';
+      document.getElementById('self').addEventListener('input', (e) => { window.__editorValue = e.currentTarget.innerText.trim(); });
+    </script>
+  </body>
+</html>

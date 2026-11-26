@@ -182,7 +182,7 @@ function enumOutcome(
         reasons: [`${m.why}（${m.candidates.join('、')}），先选第一个，可在上面改`],
       };
     case 'none':
-      return { level: 'skip', skipReason: 'no-option', reasons: [`档案里是“${display}”，网页的选项里没有它`] };
+      return { level: 'skip', skipReason: 'no-option', display, reasons: [`档案里是“${display}”，网页的选项里没有它`] };
     case 'unknown':
       if (f.kind === 'radio' || f.kind === 'radio-button') return { level: 'skip', skipReason: 'no-option', reasons: ['没读到这一栏有哪些选项'] };
       return {
@@ -449,6 +449,9 @@ function valueFor(rule: PathRule, raw: unknown, f: FieldDescriptor, fr: FieldRul
   }
 }
 
+/** 表单里出现这类标签，说明这一组填的是另一个人（亲属、联系人）的信息。 */
+const OTHER_PERSON = /与本人(的)?关系|亲属关系|成员关系|称谓/;
+
 function emptyItem(f: FieldDescriptor, order: number): Omit<PlanItem, 'level' | 'reasons'> {
   return { fieldKey: f.key, label: f.label, section: f.section, sensitivity: 'low', order, kind: f.kind };
 }
@@ -460,10 +463,17 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
   const usedPaths = new Set<string>();
   // 通用识别时自定义字段只做标签完全相等（按高敏感处理）
   const customRules: PathRule[] = (ctx.profile.custom ?? []).map((c) => customRule(c, 'high'));
+  const formKey = (f: FieldDescriptor) => `${f.sectionKey ?? f.section}|${f.formIndex}`;
+  const otherPersonForms = new Set(fields.filter((f) => OTHER_PERSON.test(norm(f.label))).map(formKey));
 
   fields.forEach((f, i) => {
     if (!f.visible) return;
     const base = emptyItem(f, i);
+    // 扫描时已经认定需要本人完成的控件（日历、地区面板、上传、声明）
+    if (f.manualNote) {
+      items.push({ ...base, level: 'skip', skipReason: 'manual', reasons: [f.manualNote] });
+      return;
+    }
     const fr = adapterRuleFor(f, ctx.adapter);
     const scope = scopeFor(f, ctx);
 
@@ -482,6 +492,8 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
     let fieldLevel: Level;
     let score: number | undefined;
     const reasons: string[] = [];
+    /** 单页报名表里的学校、专业：用最高学历那一条 */
+    let fallbackRecord: (Record<string, unknown> & { id: string }) | undefined;
     if (fr?.path?.startsWith('custom.')) {
       const c = adapterCustomField(fr.path, f, ctx.profile);
       if (!c) {
@@ -497,7 +509,16 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
       reasons.push(`网页的“${f.label.trim()}”对应档案里的“${fieldName(rule)}”（${ctx.adapter?.name ?? '本网站'}专用对应表）`);
     } else {
       const bm = bestMatch(f, scope, scope === 'single' ? customRules : []);
-      const ev: MatchEvidence | undefined = bm.evidence;
+      let ev: MatchEvidence | undefined = bm.evidence;
+      // 没有分区块的报名表（个人信息和学校、专业混在一张表里）：单项信息里对不上时，按最高学历那一条对应教育信息
+      if (scope === 'single' && !ctx.record && (!ev || levelFromScore(ev.score) === 'low')) {
+        const edu = bestMatch(f, 'education').evidence;
+        const top = edu && edu.labelEvidence !== 'none' && levelFromScore(edu.score) !== 'low' ? highestEducation(ctx.profile) : undefined;
+        if (edu && top) {
+          ev = edu;
+          fallbackRecord = top as unknown as Record<string, unknown> & { id: string };
+        }
+      }
       if (!ev) {
         items.push({ ...base, level: 'low', skipReason: 'unrecognized', reasons: ['档案里找不到和这一栏对应的内容'] });
         return;
@@ -506,6 +527,17 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
       score = ev.score;
       fieldLevel = levelFromScore(ev.score);
       reasons.push(`网页的“${f.label.trim()}”应该是档案里的“${fieldName(rule)}”：`, ...ev.reasons);
+      if (fallbackRecord) {
+        fieldLevel = 'medium';
+        reasons.push(`这一栏不在“教育经历”区块里，按你的最高学历那一条（${String(fallbackRecord.school ?? '')}）填，请核对`);
+      }
+      // 亲属防护：这一组表单里有“与本人关系”这类栏目、所在区块又不是本人信息的区块时，
+      // 姓名、电话这些栏目填的是别人的资料，不能按申请人本人的填
+      const ownSection = rule.sections?.some((s) => norm(f.section).includes(norm(s)));
+      if (scope === 'single' && !ownSection && otherPersonForms.has(formKey(f)) && fieldLevel !== 'low') {
+        fieldLevel = 'low';
+        reasons.push('这一组表单里有“与本人关系”一类的栏目，像是在填亲属或联系人的信息，所以不按你本人的资料填');
+      }
     }
     const dependency = fr?.dependency ?? rule.dependency;
     const kind = fr?.kind ?? f.kind;
@@ -521,7 +553,7 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
     }
 
     // 绑定记录
-    let record = ctx.record;
+    let record = ctx.record ?? fallbackRecord;
     if (!record && scope !== 'single') {
       if (!recordsCache.has(scope)) {
         const arr = ((ctx.profile as unknown as Record<string, Record<string, unknown>[] | undefined>)[scope] ?? []) as Array<Record<string, unknown> & { id: string }>;
@@ -537,7 +569,7 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
     } else {
       raw = profileValue(rule, ctx, record);
     }
-    const path = record && scope !== 'single' ? `${scope}[${record.id}].${rule.key.slice(scope.length + 1)}` : rule.key;
+    const path = record && rule.scope !== 'single' ? `${rule.scope}[${record.id}].${rule.key.slice(rule.scope.length + 1)}` : rule.key;
     const dupKey = `${f.sectionKey ?? f.section}|${f.formIndex}|${path}`;
     if (usedPaths.has(dupKey)) {
       items.push({ ...base, path, recordId: record?.id, level: 'skip', skipReason: 'duplicate', sensitivity: rule.sensitivity, reasons: ['和上一栏是同一项内容，只填一次'] });
@@ -554,6 +586,11 @@ export function buildPlan(fields: FieldDescriptor[], ctx: PlanContext): PlanItem
       return;
     }
 
+    // 只读的文字框通常是点开后要自己选的控件（地区、日历…），直接写入会失败
+    if (fd.kind === 'text' && f.readonly && rule.valueType !== 'manual') {
+      items.push({ ...base, path, recordId: record?.id, level: 'skip', skipReason: 'not-supported', sensitivity: rule.sensitivity, reasons: [...reasons, '这一栏不能直接输入，要点开后自己选'] });
+      return;
+    }
     const vo = valueFor(rule, raw, fd, fr, ctx, record);
     let level = vo.level === 'skip' ? 'skip' : minLevel(fieldLevel, vo.level);
     let value = vo.value;

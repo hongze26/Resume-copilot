@@ -47,19 +47,46 @@ export interface ParseResult {
   sections: string[];
   /** 没有归入任何字段的行（预览中折叠显示） */
   unparsed: string[];
+  /** 大模型识别时没有填入的项和原因（格式不对、找不到原文依据），预览里列出 */
+  dropped?: string[];
 }
 
 // ---------------- 文字规整 ----------------
 
-const BULLET = /^[\s•●○◆◇■□▪▫·・\-*>›»✓√★☆◎①②③④⑤⑥⑦⑧⑨⑩]+|^\(?\d{1,2}[.、)）]\s*(?=\D)/;
+const BULLET = /^[\s•●○◆◇■□▪▫·・\-*>›»✓√★☆◎①②③④⑤⑥⑦⑧⑨⑩]+|^[(（]?\d{1,2}[.．、)）]\s*(?=\D)/;
 
-function clean(line: string): string {
-  return toHalfWidth(line)
+const MONTHS: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+
+/** 英文简历的日期写法统一成“2019.09”：Sep 2019、Sept. 2019、09/2019。 */
+function normDates(s: string): string {
+  return s
+    .replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s*((?:19|20)\d{2})\b/gi, (_m, mon: string, y: string) => `${y}.${MONTHS[mon.slice(0, 3).toLowerCase()]}`)
+    .replace(/(?<![\d.])(0?[1-9]|1[0-2])\s*\/\s*((?:19|20)\d{2})\b/g, (_m, mon: string, y: string) => `${y}.${mon.padStart(2, '0')}`);
+}
+
+/** 不改全角标点的规整：长文本（自我评价、工作描述）从这里取，保留原文的中文标点。 */
+function keepWidth(line: string): string {
+  return line
     .replace(/[​﻿]/g, '')
-    .replace(/\t/g, ' ')
+    // 制表符多用来对齐分栏（“2019.09-2023.06<Tab>湖南大学”），按两个空格算
+    .replace(/\t+/g, '  ')
+    .replace(/ /g, ' ')
     .replace(/ {2,}/g, '  ')
     .trim();
 }
+
+/** 用于匹配的规整：全角转半角、英文日期转数字。 */
+function clean(line: string): string {
+  return normDates(keepWidth(toHalfWidth(line)));
+}
+
+/** 规整后的行 → 原文的行（只去掉多余空白），解析一次时有效。 */
+let ORIGIN = new Map<string, string>();
+const orig = (line: string): string => ORIGIN.get(line) ?? line;
+/** 长文本用原文（保留中文标点），去掉项目符号。 */
+const origBody = (line: string): string => stripBullet(orig(line));
+
+const nz = (v: unknown) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
 
 function stripBullet(line: string): string {
   return line.replace(BULLET, '').trim();
@@ -76,29 +103,106 @@ function tokens(line: string): string[] {
 // ---------------- 区块标题 ----------------
 
 const SECTION_WORDS: Array<{ key: SectionKey; re: RegExp }> = [
-  { key: 'basic', re: /^(基本信息|个人信息|基本资料|个人资料|个人概况|Personal\s*(Info|Information|Details))$/i },
-  { key: 'intention', re: /^(求职意向|求职目标|应聘岗位|意向岗位|Job\s*Objective|Objective)$/i },
-  { key: 'education', re: /^(教育背景|教育经历|学习经历|教育情况|Education(al)?(\s*Background)?)$/i },
-  { key: 'work', re: /^(工作经历|实习经历|工作\/实习经历|实习\/工作经历|实习经验|工作经验|工作与实习经历|实践经历|职业经历|Work\s*Experience|Internships?|Experience|Professional\s*Experience)$/i },
-  { key: 'projects', re: /^(项目经历|项目经验|科研经历|科研项目|研究经历|项目与科研|Projects?(\s*Experience)?|Research(\s*Experience)?)$/i },
-  { key: 'leadership', re: /^(校园经历|学生工作|学生干部经历|在校经历|社团经历|校内经历|社团活动|学生工作经历|Leadership|Campus\s*Activities)$/i },
-  { key: 'practice', re: /^(社会实践|志愿服务|志愿者经历|社会实践经历|实践活动|Volunteer(ing)?(\s*Experience)?)$/i },
-  { key: 'honors', re: /^(获奖情况|荣誉奖励|所获荣誉|奖励荣誉|获奖经历|荣誉证书|奖项|荣誉|获奖|奖励情况|Honou?rs?(\s*(&|and)\s*Awards?)?|Awards?)$/i },
-  { key: 'skills', re: /^(证书|技能证书|资格证书|证书资质|专业技能|技能|技能特长|个人技能|技能与证书|证书与技能|技能\/证书|语言能力|外语能力|计算机能力|IT技能|Skills?(\s*(&|and)\s*Certificates?)?|Certificates?|Languages?)$/i },
-  { key: 'family', re: /^(家庭成员|家庭情况|主要家庭成员|家庭成员及主要社会关系|家庭关系|Family)$/i },
-  { key: 'self', re: /^(自我评价|个人评价|自我介绍|个人总结|个人优势|自我描述|Self[-\s]*(Evaluation|Assessment)|Summary|About\s*Me)$/i },
+  { key: 'basic', re: /^(基本信息|个人信息|基本资料|个人资料|个人概况|个人基本信息|个人简介信息|Personal\s*(Info|Information|Details|Profile)|Basic\s*Information|Contact(\s*Information)?)$/i },
+  { key: 'intention', re: /^(求职意向|求职目标|应聘岗位|意向岗位|应聘职位|求职岗位|Job\s*(Objective|Intention)|Career\s*Objective|Objective)$/i },
+  { key: 'education', re: /^(教育背景|教育经历|学习经历|教育情况|学历背景|学历信息|教育信息|学业背景|Education(al)?(\s*(Background|Experience))?)$/i },
+  { key: 'work', re: /^(工作经历|实习经历|工作\/实习经历|实习\/工作经历|实习经验|工作经验|工作与实习经历|实习与工作经历|工作及实习经历|实习及工作经历|实习实践经历|实习实践|实践经历|职业经历|工作履历|实习履历|任职经历|Work\s*(Experience|History)|Internships?(\s*Experience)?|Experience|(Professional|Employment|Working)\s*(Experience|History))$/i },
+  { key: 'projects', re: /^(项目经历|项目经验|科研经历|科研项目|研究经历|项目与科研|科研与项目经历|项目与科研经历|科研项目经历|项目实践|课题研究|学术科研|Projects?(\s*Experiences?)?|Research(\s*(Experience|Projects?))?|Academic\s*Projects?)$/i },
+  { key: 'leadership', re: /^(校园经历|学生工作|学生干部经历|在校经历|社团经历|校内经历|社团活动|学生工作经历|校园活动|社会工作|组织经历|学生会经历|Leadership(\s*Experience)?|Campus\s*(Activities|Experience|Involvement)|(Extracurricular\s*)?Activities)$/i },
+  { key: 'practice', re: /^(社会实践|志愿服务|志愿者经历|志愿经历|社会实践经历|实践活动|实践经验|志愿活动|Volunteer(ing)?(\s*Experience)?|Social\s*Practice)$/i },
+  { key: 'honors', re: /^(获奖情况|荣誉奖励|所获荣誉|奖励荣誉|获奖经历|荣誉证书|奖项|荣誉|获奖|奖励情况|荣誉奖项|获奖荣誉|在校荣誉|荣誉称号|竞赛获奖|奖惩情况|奖学金|所获奖励|获奖与荣誉|荣誉与奖励|Honou?rs?(\s*(&|and)\s*Awards?)?|Awards?(\s*(&|and)\s*Honou?rs?)?|Scholarships?)$/i },
+  { key: 'skills', re: /^(证书|技能证书|资格证书|证书资质|专业技能|技能|技能特长|个人技能|技能与证书|证书与技能|技能\/证书|证书\/技能|技能及证书|证书及技能|语言能力|外语能力|计算机能力|IT技能|职业技能|资质证书|职业资格|技能与语言|语言与技能|技能证书与语言能力|专业技能与证书|Skills?(\s*(&|and)\s*(Certificates?|Certifications?|Languages?))?|(Language|Computer|Technical|Professional)\s*Skills|Certificates?|Certifications?|Languages?)$/i },
+  { key: 'family', re: /^(家庭成员|家庭情况|主要家庭成员|家庭成员及主要社会关系|家庭关系|家庭主要成员|Family(\s*Members?)?)$/i },
+  { key: 'self', re: /^(自我评价|个人评价|自我介绍|个人总结|个人优势|自我描述|个人简介|个人陈述|自我总结|个人特点|Self[-\s]*(Evaluation|Assessment|Introduction)|Summary|About\s*Me|Personal\s*(Statement|Summary))$/i },
+  // 档案里没有对应栏目的：单独成块，免得内容混进上一个区块（比如兴趣爱好被当成技能）
+  { key: 'hobby', re: /^(兴趣爱好|爱好特长|个人爱好|兴趣特长|特长爱好|爱好|Hobbies(\s*(&|and)\s*Interests)?|Interests)$/i },
+  { key: 'papers', re: /^(论文发表|发表论文|学术成果|科研成果|学术论文|论文及专利|论文与专利|Publications?)$/i },
+  { key: 'other', re: /^(其他信息|附加信息|其他|其它|补充信息|其他说明|Additional\s*Information|Others?)$/i },
 ];
 
-type SectionKey = 'header' | 'basic' | 'intention' | 'education' | 'work' | 'projects' | 'leadership' | 'practice' | 'honors' | 'skills' | 'family' | 'self';
+type SectionKey = 'header' | 'basic' | 'intention' | 'education' | 'work' | 'projects' | 'leadership' | 'practice' | 'honors' | 'skills' | 'family' | 'self' | 'hobby' | 'papers' | 'other';
+
+const CJK = '一-龥';
+const HEADING_TRIM = /^[\s【\[(（<《■□▌▍▎|｜◆◇●○•·#\-—=_~*>›»✦★☆▶►]+|[\s】\])）>》:：\-—=_~*<‹«]+$/g;
+
+/**
+ * 区块标题 → 区块和显示用的标题。模板里常见的写法都认：
+ * “教育背景 EDUCATION”“EDUCATION 教育背景”“■ 教育背景 / Education”“教 育 背 景”“01 实习经历”“二、项目经历”。
+ */
+function headingInfo(line: string): { key: SectionKey; title: string } | undefined {
+  if (line.length > 48) return undefined;
+  let t = line
+    .replace(HEADING_TRIM, '')
+    .replace(/^[一二三四五六七八九十]+\s*[、.．]\s*/, '')
+    .replace(/^(?:\d{1,2}|Part\s*\d)\s*[、.．]?\s+(?=\D)/i, '')
+    .replace(/^\d{1,2}[、.．]\s*/, '')
+    .replace(HEADING_TRIM, '')
+    // “技能 | 证书”“技能｜证书”→“技能/证书”
+    .replace(new RegExp(`(?<=[${CJK}])\\s*[|｜]\\s*(?=[${CJK}])`, 'g'), '/')
+    // 字间空格：“教 育 背 景”
+    .replace(new RegExp(`(?<=[${CJK}])\\s+(?=[${CJK}])`, 'g'), '')
+    .trim();
+  if (!t) return undefined;
+  const test = (s: string) => SECTION_WORDS.find((w) => w.re.test(s.trim()))?.key;
+  const whole = test(t);
+  if (whole) return { key: whole, title: t };
+  if (new RegExp(`[${CJK}]`).test(t)) {
+    // 中文标题加英文副标题：只看中文部分；英文部分只能是标题常用词（“技能 Python Java”不是标题）
+    const zh = t.replace(/[\sA-Za-z&/|｜·.\-—:：()（）[\]【】]+/g, ' ').trim();
+    const en = t.replace(new RegExp(`[${CJK}/|｜·:：()（）\\[\\]【】\\-—]+`, 'g'), ' ').replace(/\s+/g, ' ').trim();
+    if (/\s/.test(zh) || zh.length > 12) return undefined;
+    if (en && !en.split(/[\s&]+/).filter(Boolean).every((w) => HEADING_EN.has(w.toLowerCase()))) return undefined;
+    const key = test(zh);
+    return key ? { key, title: zh } : undefined;
+  }
+  t = t.replace(/\s+/g, ' ');
+  if (t.length > 40 || !/^[A-Za-z&/\s.\-]+$/.test(t)) return undefined;
+  const key = test(t.replace(/\s*\/\s*/g, ' & '));
+  return key ? { key, title: t } : undefined;
+}
+
+/** 英文副标题里允许出现的词（模板的“EDUCATION”“Work Experience”“About Me”）。 */
+const HEADING_EN = new Set(
+  ('education educational background experience experiences work working internship internships intern professional employment history '
+    + 'project projects research academic skills skill certificates certificate certifications certification languages language computer technical '
+    + 'honors honours honor honour awards award scholarship scholarships and self evaluation assessment introduction summary about me personal '
+    + 'information info profile details basic contact objective job career intention campus activities activity extracurricular leadership involvement '
+    + 'volunteer volunteering social practice family members member hobbies hobby interests publications publication papers additional other others statement').split(' '),
+);
 
 function headingKey(line: string): SectionKey | undefined {
-  const t = line
-    .replace(/^[\s【\[(（<《■□▌▍▎|◆●•#\-—=_]+|[\s】\])）>》:：\-—=_]+$/g, '')
-    .replace(/^[一二三四五六七八九十]+[、.]\s*/, '')
-    .replace(/^\d{1,2}[、.]\s*/, '')
-    .trim();
-  if (t.length === 0 || t.length > 24) return undefined;
-  return SECTION_WORDS.find((s) => s.re.test(t))?.key;
+  return headingInfo(line)?.key;
+}
+
+/** 这一行是不是简历的区块标题（PDF 版面判断用）。 */
+export function isSectionHeading(line: string): boolean {
+  return !!headingInfo(clean(line));
+}
+
+/** 窄单元格把日期区间折成两行：“2022.07-  普华永道…” + “2022.09” → “2022.07-2022.09  普华永道…”。 */
+function joinWrappedRanges(lines: string[]): string[] {
+  const out = [...lines];
+  for (let i = 0; i + 1 < out.length; i++) {
+    const m = /^((?:19|20)\d{2}\s*[.\-/年]\s*\d{1,2}\s*月?)\s*[-–—~～至到]\s*(?=\s|$)/.exec(out[i]);
+    if (!m || findRange(out[i])) continue;
+    const nx = /^((?:19|20)\d{2}\s*[.\-/年]\s*\d{1,2}\s*月?|至今|今|现在|present|now)(?=\s|$)/i.exec(out[i + 1]);
+    if (!nx) continue;
+    out[i] = `${m[1]}-${nx[1]}${out[i].slice(m[0].length)}`;
+    const rest = out[i + 1].slice(nx[0].length).trim();
+    if (rest) out[i + 1] = rest;
+    else out.splice(i + 1, 1);
+  }
+  return out;
+}
+
+/**
+ * 标题和内容在同一行（左侧标题栏的模板、PDF 同一行合并）：“教育背景  2019.09-2023.06 中山大学…”。
+ * 只在标题词后面隔着两个以上空格，或紧跟日期时拆开；“项目经验丰富，…”这样的句子不拆。
+ */
+function splitHeadingLine(line: string): { heading: string; rest: string } | undefined {
+  const m = /^((?:[■◆◇●○•▌▍▎|｜#*>›»★☆▶►\-—]+\s*)?[^\s|｜]{2,16}?(?:\s+[A-Za-z][A-Za-z&]*(?:\s[A-Za-z][A-Za-z&]*){0,2})?)(?:\s{2,}|\s*[|｜]\s*|\s+(?=(?:19|20)\d{2}))(\S.*)$/.exec(line);
+  if (!m || !headingInfo(m[1])) return undefined;
+  return { heading: m[1], rest: m[2] };
 }
 
 // ---------------- 日期 ----------------
@@ -216,8 +320,16 @@ const HONOR_GRADE_WORDS: Array<[RegExp, string]> = [
 
 // ---------------- 基本信息 ----------------
 
-const KV_KEYS: Array<{ re: RegExp; path: string; label: string; kind: 'text' | 'date' | 'gender' | 'political' | 'ethnicity' | 'region' | 'number' | 'marital' | 'list' | 'regionList' | 'salary' | 'tri' | 'postal' | 'emergency' | 'custom'; sensitive?: boolean }> = [
+const KV_KEYS: Array<{ re: RegExp; path: string; label: string; kind: 'text' | 'date' | 'gender' | 'political' | 'ethnicity' | 'region' | 'number' | 'marital' | 'list' | 'regionList' | 'salary' | 'tri' | 'postal' | 'emergency' | 'custom' | 'edu'; sensitive?: boolean }> = [
   { re: /^(姓名|名字|Name)$/i, path: 'basic.name', label: '姓名', kind: 'text' },
+  // 表格式简历把学校、专业、学历写在基本信息表里：收集起来生成一条教育经历
+  { re: /^(毕业院校|毕业学校|就读院校|就读学校|所在院校|所在学校|学校名称|院校名称|学校|院校)$/, path: 'edu.school', label: '毕业院校', kind: 'edu' },
+  { re: /^(所学专业|就读专业|专业名称|专业)$/, path: 'edu.major', label: '专业', kind: 'edu' },
+  { re: /^(最高学历|学历层次|学历)$/, path: 'edu.level', label: '学历', kind: 'edu' },
+  { re: /^(最高学位|学位)$/, path: 'edu.degree', label: '学位', kind: 'edu' },
+  { re: /^(毕业时间|毕业日期|毕业年月|毕业年份|预计毕业时间|预计毕业)$/, path: 'edu.end', label: '毕业时间', kind: 'edu' },
+  { re: /^(入学时间|入学日期|入学年月|入学年份)$/, path: 'edu.start', label: '入学时间', kind: 'edu' },
+  { re: /^(所在院系|所在学院|院系|学院)$/, path: 'edu.college', label: '学院', kind: 'edu' },
   { re: /^(性别|Gender|Sex)$/i, path: 'basic.gender', label: '性别', kind: 'gender' },
   { re: /^(出生年月|出生日期|生日|出生年月日|Birthday|Date of Birth|DOB)$/i, path: 'basic.birthDate', label: '出生日期', kind: 'date' },
   { re: /^(民族)$/, path: 'basic.ethnicity', label: '民族', kind: 'ethnicity' },
@@ -248,6 +360,17 @@ const KV_KEYS: Array<{ re: RegExp; path: string; label: string; kind: 'text' | '
 ];
 const KEY_ALT = KV_KEYS.map((k) => k.re.source.replace(/^\^\(|\)\$$/g, '')).join('|');
 const KV_RE = new RegExp(String.raw`(${KEY_ALT})\s*[:：]\s*`, 'gi');
+const specOf = (key: string) => KV_KEYS.find((k) => k.re.test(key.trim()));
+const isKeyToken = (t: string): boolean => !!specOf(t.replace(/[:：]$/, ''));
+
+/** 表格里为了对齐把标签字拉开：“姓  名”“籍 贯” → “姓名”“籍贯”。只合并词表里的标签。 */
+const SPACED_KEYS: Array<[RegExp, string]> = [...new Set(KEY_ALT.split('|').filter((k) => /^[一-龥]{2,4}$/.test(k)))].map((k) => [new RegExp(`(?<![一-龥])${[...k].join('\\s+')}(?![一-龥])`, 'g'), k]);
+function unspaceKeys(line: string): string {
+  if (!/[一-龥]\s+[一-龥]/.test(line)) return line;
+  let s = line;
+  for (const [re, k] of SPACED_KEYS) s = s.replace(re, k);
+  return s;
+}
 
 const PROVINCES = [
   '北京', '天津', '上海', '重庆', '河北', '山西', '辽宁', '吉林', '黑龙江', '江苏', '浙江', '安徽', '福建', '江西', '山东', '河南', '湖北', '湖南', '广东', '海南',
@@ -329,18 +452,26 @@ function ethnicityOf(v: string): string | undefined {
 
 class Collector {
   fields = new Map<string, ParsedField>();
+  /** 基本信息表里的学校、专业等（edu.school → 值），最后合成一条教育经历 */
+  edu = new Map<string, { value: string; source: string }>();
   add(f: ParsedField) {
     if (!this.fields.has(f.path)) this.fields.set(f.path, f);
   }
 }
 
 function addKv(c: Collector, key: string, rawValue: string, source: string): boolean {
-  const spec = KV_KEYS.find((k) => k.re.test(key.trim()));
+  const spec = specOf(key);
   if (!spec) return false;
   const v = rawValue.replace(/[;；,，]+$/, '').trim();
   if (!v) return false;
   const base = { path: spec.path, label: spec.label, sensitive: spec.sensitive, source };
   switch (spec.kind) {
+    case 'edu': {
+      // 值里不能再像一个标签（“学校 专业”这种表头行）
+      if (isKeyToken(v) || v.length > 40) return false;
+      if (!c.edu.has(spec.path)) c.edu.set(spec.path, { value: v, source });
+      return true;
+    }
     case 'text': {
       if (spec.path === 'contact.mobile') {
         const m = /1[3-9]\d{9}/.exec(v.replace(/[\s-]/g, ''));
@@ -354,7 +485,13 @@ function addKv(c: Collector, key: string, rawValue: string, source: string): boo
         c.add({ ...base, value: m[0], display: m[0] });
         return true;
       }
-      if (spec.path === 'basic.name' && v.length > 20) return false;
+      if (spec.path === 'basic.name') {
+        // 表格里为了对齐写成“王 五”
+        const name = v.replace(/(?<=[一-龥])\s+(?=[一-龥])/g, '');
+        if (name.length > 20) return false;
+        c.add({ ...base, value: name, display: name });
+        return true;
+      }
       c.add({ ...base, value: v, display: v });
       return true;
     }
@@ -490,27 +627,72 @@ function kvPairs(line: string): Array<{ key: string; value: string }> {
     const end = i + 1 < hits.length ? hits[i + 1].start : line.length;
     const seg = line.slice(h.valueStart, end).trim();
     // 列表类（求职意向、期望城市）保留整段，其余取第一个分隔符前的部分
-    const isList = KV_KEYS.some((k) => (k.kind === 'list' || k.kind === 'regionList') && k.re.test(h.key));
+    const kind = specOf(h.key)?.kind;
+    const isList = kind === 'list' || kind === 'regionList';
     const value = isList ? seg : seg.split(/\s*[|｜丨]\s*|\s{2,}/)[0].trim();
     out.push({ key: h.key, value });
   });
   return out;
 }
 
+/**
+ * 表格式简历的一行：“姓名 王五 性别 男 出生年月 1999.05”“姓名 | 王五 | 性别 | 男”。
+ * 标签后面直到下一个标签的内容是值。至少两个标签，或整行就是“标签 值”，才按表格理解。
+ */
+function tablePairs(line: string): Array<{ key: string; value: string }> {
+  if (/[。！？]/.test(line)) return [];
+  const ts = line.split(/\s*[|｜丨]\s*|\s+/).filter(Boolean);
+  const at = ts.map((t, i) => (isKeyToken(t) ? i : -1)).filter((i) => i >= 0);
+  if (at.length === 0 || !(at.length >= 2 || (at[0] === 0 && ts.length === 2))) return [];
+  const out: Array<{ key: string; value: string }> = [];
+  at.forEach((i, n) => {
+    const value = ts.slice(i + 1, n + 1 < at.length ? at[n + 1] : ts.length).join(' ');
+    if (value) out.push({ key: ts[i].replace(/[:：]$/, ''), value });
+  });
+  return out;
+}
+
+/** 整行只有一个标签（“籍贯”“邮箱：”）：值在下一行。 */
+function keyOnly(line: string): string | undefined {
+  const t = line.trim().replace(/\s*[:：]$/, '');
+  return isKeyToken(t) ? t : undefined;
+}
+
+const NAME_STOP = /简历|个人|求职|应聘|基本|信息|资料|联系|电话|手机|邮箱|地址|教育|经历|技能|证书|荣誉|评价|意向/;
+
 function parseHeader(lines: string[], c: Collector, consumed: Set<string>) {
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
-    const pairs = kvPairs(line);
+    const L = unspaceKeys(line);
+    const colon = kvPairs(L);
+    const pairs = colon.length ? colon : tablePairs(L);
     let used = false;
-    // 窄栏里“邮箱：”后面的值被换到了下一行
-    const lone = pairs.length === 1 && pairs[0].value === '' && line.trim().endsWith(':') ? pairs[0] : undefined;
-    if (lone && li + 1 < lines.length && kvPairs(lines[li + 1]).length === 0 && addKv(c, lone.key, lines[li + 1].trim(), `${line}\n${lines[li + 1]}`)) {
+    // 标签和值分在两行：“邮箱：”后的值被窄栏换到下一行，或表格单元格逐格成行
+    const lone = keyOnly(L);
+    const next = li + 1 < lines.length ? unspaceKeys(lines[li + 1]) : undefined;
+    if (lone && next !== undefined && !keyOnly(next) && kvPairs(next).length === 0 && !headingKey(next) && addKv(c, lone, next.trim(), `${line}\n${lines[li + 1]}`)) {
       consumed.add(line);
       consumed.add(lines[li + 1]);
       li++;
       continue;
     }
     for (const p of pairs) used = addKv(c, p.key, p.value, line) || used;
+    // 顶部横幅里的“湖南大学 · 会计学 · 本科”：没有标签也能看出是教育信息
+    if (!pairs.length && !c.edu.has('edu.school') && line.length <= 60) {
+      const school = SCHOOL_RE.exec(line)?.[1];
+      const level = levelOf(line);
+      if (school && level && !/(公司|集团|银行|实习|工作|任职)/.test(line)) {
+        c.edu.set('edu.school', { value: school, source: line });
+        c.edu.set('edu.level', { value: LEVEL_ZH[level], source: line });
+        const major = line
+          .replace(school, ' ')
+          .split(/[\s|｜丨·,，/]+/)
+          .map((t) => t.replace(LEVEL_STRIP, '').replace(/专业$/, '').trim())
+          .find((t) => t.length >= 2 && t.length <= 20 && !/\d|届|GPA|学院$/.test(t));
+        if (major) c.edu.set('edu.major', { value: major, source: line });
+        used = true;
+      }
+    }
     // 没有“键：值”的行：按分隔符逐段识别（男 | 23岁 | 中共党员 | 湖南长沙）
     for (const t of line.split(/[\s|｜丨,，;；]+/).filter(Boolean)) {
       if (/^[\w.+-]+@[\w-]+(\.[\w-]+)+$/.test(t)) used = addKv(c, '邮箱', t, line) || used;
@@ -527,11 +709,11 @@ function parseHeader(lines: string[], c: Collector, consumed: Set<string>) {
     if (mobile && !/身份证|证件|紧急|联系人|父亲|母亲|家属|导师|证明人/.test(line)) used = addKv(c, '手机', mobile[0], line) || used;
     if (used) consumed.add(line);
   }
-  // 姓名：没有“姓名：”时，取开头几行中 2–4 个汉字的独立行
+  // 姓名：没有“姓名：”时，取开头几行中 2–4 个汉字的独立行（“姓名”“性别”这类标签不算）
   if (!c.fields.has('basic.name')) {
     for (const line of lines.slice(0, 4)) {
-      const first = line.split(/[\s|｜丨,，]+/)[0] ?? '';
-      if (/^[一-龥]{2,4}$/.test(first) && !/简历|个人|求职|应聘|基本|信息|资料/.test(first)) {
+      const first = line.split(/[\s|｜丨,，:：]+/)[0] ?? '';
+      if (/^[一-龥]{2,4}$/.test(first) && !NAME_STOP.test(first) && !isKeyToken(first) && !headingKey(first) && !ethnicityOf(first) && !politicalOf(first) && !/^(男|女)/.test(first)) {
         c.add({ path: 'basic.name', label: '姓名', value: first, display: first, source: line });
         consumed.add(line);
         break;
@@ -548,6 +730,9 @@ interface Entry {
   body: string[];
   raw: string[];
 }
+
+/** 条目正文按原文（保留中文标点）。 */
+const bodyOrig = (e: Entry): string[] => e.body.map((_, i) => origBody(e.raw[e.raw.length - e.body.length + i]));
 
 const looksLikeTitle = (l: string | undefined): boolean => !!l && l.length <= 60 && (SCHOOL_RE.test(l) || COMPANY_RE.test(l) || /[|｜丨]/.test(l));
 
@@ -647,6 +832,11 @@ function parseEducation(e: Entry): ParsedRecord {
       .filter((t) => t.length >= 2 && t.length <= 20 && !/^\d|GPA|绩点|排名|^[A-Za-z.]{1,4}$/i.test(t));
     if (cand[0]) rec.major = cand[0].replace(/专业$/, '');
   }
+  if (!rec.major && !headRest.replace(/[\s|｜丨,，;；·]+/g, '')) {
+    // 单元格逐行提取时，学校下一行是专业：只认像专业名称的词（“荣获国家奖学金”不算）
+    const m = e.body.slice(0, 3).map((l) => l.trim()).find((l) => MAJOR_LIKE.test(l) && !/(大学|学院|学校)$/.test(l) && !levelOf(l));
+    if (m) rec.major = m.replace(/专业$/, '');
+  }
   if (!rec.major) notes.push('专业未识别');
   const direction = /研究方向\s*[:：]\s*([^\s|｜,，;；]{2,30})/.exec(all);
   if (direction) rec.researchDirection = direction[1];
@@ -675,16 +865,21 @@ function parseEducation(e: Entry): ParsedRecord {
     const hit = new RegExp(`${label}\\s*[:：]\\s*(是|否)`).exec(all);
     if (hit) rec[key] = hit[1] === '是' ? 'yes' : 'no';
   }
-  const experience = /在校经历\s*[:：]\s*(.+)/.exec(e.body.join('\n'));
+  const experience = /在校经历\s*[:：]\s*(.+)/.exec(bodyOrig(e).join('\n'));
   if (experience) rec.schoolExperience = experience[1];
   const display = `${level ? LEVEL_ZH[level] : '学历?'} · ${school ?? '学校?'}${rec.major ? ` · ${rec.major}` : ''} · ${e.range.start || '?'}–${e.range.end ?? ''}`;
   return { collection: 'education', record: rec, display, source: e.raw.join('\n'), notes };
 }
 
-function bodyText(e: Entry): string | undefined {
-  const t = e.body.filter(Boolean).join('\n').trim();
+/** 正文前的“工作内容：”这类栏目名不是内容本身（网页上的字段已经叫“工作描述”）。 */
+const BODY_LABEL = /^(工作内容|工作职责|主要职责|工作描述|职责描述|主要工作|岗位职责|工作业绩|实习内容)(?:\s*[:：]\s*|\s+|$)/;
+
+function bodyText(e: Entry, skip = 0): string | undefined {
+  const t = bodyOrig(e).slice(skip).map((l) => l.replace(BODY_LABEL, '')).filter(Boolean).join('\n').trim();
   return t || undefined;
 }
+
+const MAJOR_LIKE = /^[一-龥()（）与和及]{1,20}(学|工程|技术|管理|经济|金融|会计|审计|财务|法|设计|教育|艺术|文学|翻译|新闻|传播|医学|护理|药学|科学|统计|物理|化学|生物|数学|计算机|软件|电子|通信|自动化|机械|土木|建筑|材料|能源|环境|心理|哲学|历史|政治|英语|日语|商务|贸易|物流|营销|人力资源|信息|数据|智能)(专业)?$/;
 
 const SALARY_RE = /(?:月薪|薪资|工资|月收入|薪酬)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*([kK千wW万])?\s*(?:元|RMB)?(?:\s*\/\s*月)?/;
 
@@ -706,7 +901,11 @@ function parseWork(e: Entry, sectionTitle: string): ParsedRecord {
     rest = rest.filter((t) => t !== loc.t);
   }
   const dept = rest.find((t) => /(部|处|科|组|中心|事业部|团队|Department|Team)$/i.test(t));
-  const title = rest.find((t) => t !== dept && TITLE_RE.test(t)) ?? rest.find((t) => t !== dept);
+  let title = rest.find((t) => t !== dept && TITLE_RE.test(t)) ?? rest.find((t) => t !== dept);
+  // 单元格逐行提取时，单位下一行是职位
+  const first = e.body[0]?.trim();
+  const titleFromBody = !title && !!first && first.length <= 20 && !/[\s:：,，。;；]/.test(first) && TITLE_RE.test(first);
+  if (titleFromBody) title = first;
   if (company) rec.company = company;
   else notes.push('单位名称未识别');
   if (dept) rec.department = dept;
@@ -724,7 +923,7 @@ function parseWork(e: Entry, sectionTitle: string): ParsedRecord {
     rec.kind = 'full-time';
     notes.push('工作性质按“全职”推断，请核对');
   }
-  const desc = bodyText(e);
+  const desc = bodyText(e, titleFromBody ? 1 : 0);
   if (desc) rec.description = desc;
   return { collection: 'work', record: rec, display: `${company ?? '单位?'} · ${title ?? '职位?'} · ${e.range.start}–${e.range.end ?? ''}`, source: e.raw.join('\n'), notes };
 }
@@ -753,7 +952,7 @@ function parseProject(e: Entry): ParsedRecord {
   const org = ts.find((t) => t !== role && t !== name && (SCHOOL_RE.test(t) || COMPANY_RE.test(t)));
   if (org) rec.organization = org;
   let target = 'introduction';
-  for (const line of e.body) {
+  for (const line of bodyOrig(e)) {
     const labeled = /^(项目介绍|项目描述|项目职责|本人职责|项目成果|项目业绩|所在单位|项目单位|团队规模)\s*[:：]\s*(.*)$/.exec(line);
     if (labeled) {
       const key = ({ 项目介绍: 'introduction', 项目描述: 'introduction', 项目职责: 'duty', 本人职责: 'duty', 项目成果: 'achievement', 项目业绩: 'achievement', 所在单位: 'organization', 项目单位: 'organization', 团队规模: 'teamSize' } as Record<string, string>)[labeled[1]];
@@ -953,17 +1152,35 @@ function parseFamilyLine(line: string): ParsedRecord | undefined {
 // ---------------- 主入口 ----------------
 
 export function parseResumeText(input: string): ParseResult {
-  const lines = input
-    .split(/\r?\n/)
-    .map(clean)
-    .filter((l) => l.length > 0);
+  ORIGIN = new Map();
+  const lines: string[] = [];
+  for (const raw of input.split(/\r?\n/)) {
+    const line = clean(raw);
+    if (!line) continue;
+    if (!ORIGIN.has(line)) ORIGIN.set(line, keepWidth(raw));
+    lines.push(line);
+  }
 
-  // 切分区块
+  // 切分区块；标题和内容在同一行时拆开（“教育背景  2019.09-2023.06 中山大学…”）
   const blocks: Array<{ key: SectionKey; title: string; lines: string[] }> = [{ key: 'header', title: '', lines: [] }];
-  for (const line of lines) {
-    const k = headingKey(line);
-    if (k) blocks.push({ key: k, title: line.replace(/[【】\[\]:：■▌|]/g, '').trim(), lines: [] });
-    else blocks[blocks.length - 1].lines.push(line);
+  for (const line of joinWrappedRanges(lines)) {
+    const h = headingInfo(line);
+    if (h) {
+      blocks.push({ key: h.key, title: h.title, lines: [] });
+      continue;
+    }
+    const sp = splitHeadingLine(line);
+    if (sp) {
+      const key = headingInfo(sp.heading)!;
+      blocks.push({ key: key.key, title: key.title, lines: [] });
+      // “求职意向  财务分析师  期望城市：上海”：标题本身也是“求职意向：”这个标签
+      const rest = key.key === 'intention' && !isKeyToken(sp.rest.split(/[\s:：|｜]/)[0]) ? `求职意向:${sp.rest}` : sp.rest;
+      const o = splitHeadingLine(orig(line));
+      if (o && !ORIGIN.has(rest)) ORIGIN.set(rest, o.rest);
+      blocks[blocks.length - 1].lines.push(rest);
+      continue;
+    }
+    blocks[blocks.length - 1].lines.push(line);
   }
 
   const c = new Collector();
@@ -1060,11 +1277,56 @@ export function parseResumeText(input: string): ParseResult {
           else unparsed.push(l);
         }
         break;
-      case 'self': {
-        const body = b.lines.map(stripBullet).join('\n').trim();
-        if (body) records.push({ collection: 'textTemplates', record: { title: b.title || '自我评价', kind: 'self-assessment', body }, display: `${b.title || '自我评价'}（${body.length} 字）`, source: b.lines.join('\n'), notes: ['原样保存，不改写'] });
+      case 'self':
+      case 'hobby':
+      case 'papers': {
+        // 原样保存（保留中文标点），不改写
+        const body = b.lines.map(origBody).join('\n').trim();
+        const title = b.key === 'self' ? (/[一-龥]/.test(b.title) ? b.title : '自我评价') : b.key === 'hobby' ? '兴趣爱好' : (/[一-龥]/.test(b.title) ? b.title : '论文发表');
+        if (body) records.push({ collection: 'textTemplates', record: { title, kind: b.key === 'self' ? 'self-assessment' : 'other', body }, display: `${title}（${body.length} 字）`, source: b.lines.join('\n'), notes: ['原样保存，不改写'] });
         break;
       }
+      case 'other':
+        unparsed.push(...b.lines);
+        break;
+    }
+  }
+
+  // 基本信息表里的学校、专业、学历：教育经历里已有同一所学校时只补空缺，没有时新建一条
+  const school = c.edu.get('edu.school');
+  if (school) {
+    const rec: Record<string, unknown> = { school: school.value.replace(/[(（][^)）]*[)）]$/, '').trim() };
+    const notes: string[] = [];
+    const lv = c.edu.get('edu.level') && levelOf(c.edu.get('edu.level')!.value);
+    if (lv) rec.level = lv;
+    else notes.push('学历未识别，请选择');
+    const dg = c.edu.get('edu.degree') && levelOf(c.edu.get('edu.degree')!.value);
+    if (dg && DEGREE_FOR[dg]) rec.degree = DEGREE_FOR[dg];
+    const major = c.edu.get('edu.major')?.value.replace(/专业$/, '');
+    if (major) rec.major = major;
+    const college = c.edu.get('edu.college')?.value;
+    if (college) rec.college = college;
+    const date = (k: string) => {
+      const v = c.edu.get(k)?.value;
+      return v ? findSingleDate(v)?.date ?? (/^\d{4}$/.test(v.trim()) ? v.trim() : undefined) : undefined;
+    };
+    const start = date('edu.start');
+    const end = date('edu.end');
+    if (start) rec.start = start;
+    else notes.push('入学时间未识别，请补充');
+    if (end) rec.end = end;
+    const sameSchool = records.find((r) => r.collection === 'education' && nz(r.record.school) === nz(rec.school));
+    if (sameSchool) {
+      for (const [k, v] of Object.entries(rec)) if (sameSchool.record[k] === undefined) sameSchool.record[k] = v;
+    } else {
+      const sources = [...new Set([...c.edu.values()].map((x) => x.source))].join('\n');
+      records.unshift({
+        collection: 'education',
+        record: rec,
+        display: `${lv ? LEVEL_ZH[lv] : '学历?'} · ${rec.school}${major ? ` · ${major}` : ''}${end ? ` · ${end} 毕业` : ''}`,
+        source: sources,
+        notes: ['从基本信息里的学校、专业生成', ...notes],
+      });
     }
   }
 

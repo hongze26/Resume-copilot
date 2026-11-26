@@ -51,4 +51,6 @@ cpSync('tests/fixtures/el-like', `${out}/el-like`, { recursive: true });
 // 测试构建把 /gp-like/ 视为国聘：同一份通用页面放在这里，用来测“国聘适配器找不到区块时改用通用识别”
 cpSync('tests/fixtures/el-like/index.html', `${out}/gp-like/other.html`);
 cpSync('tests/fixtures/el-like/frame.html', `${out}/gp-like/frame.html`);
+// 自研组件申请表（区块 > 记录 > 表单项）：?plain=1 时换成一套中性类名，测试没有平台提示的通用路径
+cpSync('tests/fixtures/moka-like', `${out}/moka-like`, { recursive: true });
 console.log('fixtures built');

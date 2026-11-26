@@ -13,9 +13,11 @@ export interface Settings {
   writebackPrompt: boolean;
   /** 侧边栏跟随网页滚动到对应区块 */
   followPage: boolean;
+  /** 下拉的选项里找不到档案里的值时，允许（在逐次确认后）请大模型从选项里挑。默认关 */
+  aiEnumPick: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { allowOverwrite: false, highlightOnPage: true, writebackPrompt: true, followPage: true };
+export const DEFAULT_SETTINGS: Settings = { allowOverwrite: false, highlightOnPage: true, writebackPrompt: true, followPage: true, aiEnumPick: false };
 
 export async function loadProfile(): Promise<Profile | null> {
   const r = await chrome.storage.local.get(PROFILE_KEY);

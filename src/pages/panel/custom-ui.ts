@@ -3,14 +3,17 @@ import {
   buildPrompt,
   COLLECTION_LABEL,
   hostOf,
+  localMapping,
   newCustomId,
   pageStructure,
   parseMapping,
   pathsForCollection,
   type CustomAdapterDef,
   type CustomCollection,
+  type LocalMapping,
 } from '../../adapters/custom';
 import type { FieldDescriptor } from '../../core/plan/types';
+import { HINT_KEYS, HINT_LABEL, sanitizeHints } from '../../core/platform-hints';
 import type { CustomField as ProfileCustomField } from '../../core/profile/types';
 import { apiUrl, type AiConfig } from '../../core/resume/ai';
 import { chatJson, loadAiConfig, saveAiConfig } from '../shared/ai-chat';
@@ -59,8 +62,21 @@ export async function startGenerate(ctx: GenerateContext): Promise<void> {
   const key = h('input', { type: 'password', value: cfg.apiKey, autocomplete: 'off', 'aria-label': 'API Key' }) as HTMLInputElement;
   const status = h('p', { class: 'small', role: 'status' });
   const payload = JSON.stringify(structure, null, 1);
-  const send = h('button', { class: 'btn btn-primary' }, '确认发送并生成') as HTMLButtonElement;
+  const hasApi = !!cfg.endpoint && !!cfg.model;
+  const send = h('button', { class: `btn ${hasApi ? 'btn-primary' : ''}` }, '确认发送并生成') as HTMLButtonElement;
   const cancel = h('button', { class: 'btn' }, '取消') as HTMLButtonElement;
+  // 不用大模型：区块按标题、字段按通用识别规则先对应好，打开复核界面由本人改（不联网、不收费）
+  const local = h('button', { class: `btn ${hasApi ? '' : 'btn-primary'}`, 'data-testid': 'custom-local' }, '不用大模型，按本机规则生成') as HTMLButtonElement;
+  const newDef = (m: { sections: CustomAdapterDef['sections']; fields: CustomAdapterDef['fields'] }, modelName?: string): CustomAdapterDef => {
+    const now = new Date().toISOString();
+    const host = hostOf(ctx.url);
+    return { id: newCustomId(), name: host, hosts: [host], createdAt: now, updatedAt: now, ...(modelName ? { model: modelName } : {}), sections: m.sections, fields: m.fields };
+  };
+  local.addEventListener('click', () => {
+    const m = localMapping(structure, fields, custom);
+    close();
+    void openReview(newDef(m), [], ctx.onSaved, true, m.guesses);
+  });
   let controller: AbortController | undefined;
   cancel.addEventListener('click', () => {
     controller?.abort();
@@ -71,14 +87,14 @@ export async function startGenerate(ctx: GenerateContext): Promise<void> {
     h(
       'p',
       { class: 'small' },
-      `读取到 ${structure.sections.length} 个区块、${structure.fields.length} 个字段。将把下面的“页面结构”发送给你配置的大模型，由它判断每个字段对应档案里的哪一项。只发送字段名称、控件类型和选项${custom.length ? `，以及你在档案里建的 ${custom.length} 个自定义字段的名称` : ''}，不发送你的档案内容或页面上已填写的内容。服务商可能收取少量 API 费用。`,
+      `读取到 ${structure.sections.length} 个区块、${structure.fields.length} 个字段。可以直接按本机规则生成（不联网），再在复核界面里逐项改；也可以把下面的“页面结构”发送给你配置的大模型，由它判断每个字段对应档案里的哪一项。只发送字段名称、控件类型和选项${custom.length ? `，以及你在档案里建的 ${custom.length} 个自定义字段的名称` : ''}，不发送你的档案内容或页面上已填写的内容。服务商可能收取少量 API 费用。`,
     ),
     h('details', {}, h('summary', { class: 'small' }, '查看将要发送的内容'), h('pre', { class: 'source-pre', style: 'max-height:30vh;overflow:auto;font-size:11px' }, payload)),
     h('label', { class: 'ai-field small' }, 'API 地址', endpoint),
     h('label', { class: 'ai-field small' }, '模型名称', model),
     h('label', { class: 'ai-field small' }, 'API Key（只保存到浏览器关闭）', key),
     status,
-    h('div', { class: 'dialog-actions' }, cancel, send),
+    h('div', { class: 'dialog-actions' }, cancel, local, send),
   );
   dlg.showModal();
   send.addEventListener('click', async () => {
@@ -105,11 +121,18 @@ export async function startGenerate(ctx: GenerateContext): Promise<void> {
       await saveAiConfig(config);
       const content = await chatJson(config, buildPrompt(custom), JSON.stringify(structure), controller.signal);
       const mapping = parseMapping(content, structure, fields, custom);
-      const now = new Date().toISOString();
-      const host = hostOf(ctx.url);
-      const def: CustomAdapterDef = { id: newCustomId(), name: host, hosts: [host], createdAt: now, updatedAt: now, model: config.model, sections: mapping.sections, fields: mapping.fields };
+      // 模型没给对应的字段：附上本机规则的推测（含本机把握大的），复核时参考
+      const lm = localMapping(structure, fields, custom);
+      const guesses: LocalMapping['guesses'] = new Map();
+      mapping.fields.forEach((f, i) => {
+        if (f.path || f.manual) return;
+        const g = lm.guesses.get(i);
+        const p = lm.fields[i]?.path;
+        if (g) guesses.set(i, g);
+        else if (p) guesses.set(i, { path: p, desc: p, level: 'medium' });
+      });
       close();
-      void openReview(def, mapping.dropped, ctx.onSaved, true);
+      void openReview(newDef(mapping, config.model), mapping.dropped, ctx.onSaved, true, guesses);
     } catch (e) {
       status.textContent = controller?.signal.aborted ? '已取消或超时，没有保存任何内容。' : e instanceof Error ? e.message : '生成失败';
       send.disabled = false;
@@ -125,7 +148,7 @@ const NEW_CUSTOM = '__new-custom';
  * 第 2 步（也用于“编辑”）：逐项复核区块栏目和字段对应关系，命名后保存。
  * 档案里没有对应项的网站字段（曾用名、档案所在地…）可以选已有的自定义字段，或当场新建一个（保存适配器时写入档案）。
  */
-export async function openReview(def: CustomAdapterDef, dropped: string[], onSaved: (def: CustomAdapterDef) => void, isNew = false): Promise<void> {
+export async function openReview(def: CustomAdapterDef, dropped: string[], onSaved: (def: CustomAdapterDef) => void, isNew = false, guesses?: LocalMapping['guesses']): Promise<void> {
   const draft: CustomAdapterDef = JSON.parse(JSON.stringify(def));
   const profile = await loadProfile();
   const custom: ProfileCustomField[] = profile?.custom ?? [];
@@ -158,7 +181,10 @@ export async function openReview(def: CustomAdapterDef, dropped: string[], onSav
         draft.fields.forEach((f, i) => {
           if (f.section !== sec.key) return;
           const sel = h('select', { 'aria-label': `${sec.title}·${f.label}` }) as HTMLSelectElement;
-          sel.append(h('option', { value: '', selected: !f.path && !f.manual && !pending.has(i) }, '自动识别'));
+          // 本机规则的推测（只在新生成时有）：写在“自动识别”后面；想固定下来就在下拉里选它
+          const guess = guesses?.get(i);
+          const guessed = guess && options.find((o) => o.path === guess.path);
+          sel.append(h('option', { value: '', selected: !f.path && !f.manual && !pending.has(i) }, guessed ? `自动识别（推测：${guessed.desc}）` : '自动识别'));
           sel.append(h('option', { value: '__manual', selected: !!f.manual }, '需本人完成（不填）'));
           for (const o of options) sel.append(h('option', { value: o.path, selected: f.path === o.path }, o.desc));
           if (sec.collection === 'single') {
@@ -201,6 +227,18 @@ export async function openReview(def: CustomAdapterDef, dropped: string[], onSav
   };
   renderBody();
 
+  // 页面结构提示（高级）：通用识别读不准这个网站的字段名或下拉时，手工写出它们在哪
+  const hintInputs = HINT_KEYS.map((k) => {
+    const input = h('input', { value: draft.hints?.[k] ?? '', placeholder: 'CSS 选择器，可留空', 'aria-label': HINT_LABEL[k], 'data-hint': k }) as HTMLInputElement;
+    return { k, input };
+  });
+  const hintBox = h(
+    'details',
+    { class: 'small', 'data-testid': 'custom-hints' },
+    h('summary', {}, '页面结构提示（高级，可不填）'),
+    h('p', { class: 'muted' }, '字段名读错、下拉点不开时才需要。填 CSS 选择器，告诉工具这个网站的表单项、字段名、下拉弹层和选项在哪；写错的会被忽略。'),
+    ...hintInputs.map(({ k, input }) => h('label', { class: 'ai-field small' }, HINT_LABEL[k], input)),
+  );
   const save = h('button', { class: 'btn btn-primary' }, '保存适配器');
   save.addEventListener('click', async () => {
     const n = name.value.trim();
@@ -240,6 +278,8 @@ export async function openReview(def: CustomAdapterDef, dropped: string[], onSav
       }
     }
     draft.name = n;
+    draft.hints = sanitizeHints(Object.fromEntries(hintInputs.map(({ k, input }) => [k, input.value])));
+    if (!draft.hints) delete draft.hints;
     draft.updatedAt = new Date().toISOString();
     const all = await loadCustomAdapters();
     const i = all.findIndex((d) => d.id === draft.id);
@@ -263,6 +303,7 @@ export async function openReview(def: CustomAdapterDef, dropped: string[], onSav
   dlg.append(
     h('label', { class: 'ai-field small' }, '适配器名称（可自行命名）', name),
     body,
+    hintBox,
     h('div', { class: 'dialog-actions' }, h('button', { class: 'btn', onclick: close }, '取消'), save),
   );
   dlg.showModal();

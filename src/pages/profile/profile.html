@@ -22,7 +22,7 @@
       </div>
     </header>
     <div class="banner banner-warn page-banner">
-      档案保存在这台电脑的浏览器里；大模型识别仅在你确认后发送简历文字。<strong>卸载扩展会清除档案</strong>，请先点“导出备份”。
+      档案保存在这台电脑的浏览器里；大模型识别仅在你确认后发送简历文字或你选的截图。<strong>卸载扩展会清除档案</strong>，请先点“导出备份”。
     </div>
     <div id="save-info" class="save-info banner" role="status" aria-live="polite" data-testid="save-info"></div>
     <div id="issues" class="issues"></div>
@@ -36,6 +36,19 @@
           <input id="resume-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
           <input id="source-search" type="search" placeholder="在原文中查找，回车定位" aria-label="在原文中查找" />
         </div>
+        <section class="quick" aria-labelledby="quick-title">
+          <h3 id="quick-title">截图 / 补充内容识别</h3>
+          <p class="f-hint">把已填好的个人信息页或简历的截图粘贴进来（Ctrl+V），也可以直接写几行补充内容，识别后同样先预览、由你勾选再填入右侧。<strong>截图会发送给下方配置的大模型</strong>，发送前会再让你确认；只写文字时在本机识别，不联网。</p>
+          <div id="shot-list" class="shot-list" data-testid="shot-list"></div>
+          <textarea id="quick-text" data-testid="quick-text" rows="3" placeholder="补充内容，例如：身高 165 厘米；政治面貌 中共党员；现居上海市杨浦区" aria-label="补充内容"></textarea>
+          <div class="source-tools">
+            <label class="btn btn-small" for="shot-file">选择截图</label>
+            <input id="shot-file" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden />
+            <button id="quick-run" type="button" class="btn btn-small btn-primary" data-testid="quick-run">识别并生成</button>
+            <button id="quick-cancel" type="button" class="btn btn-small" hidden>取消识别</button>
+          </div>
+          <p id="quick-status" class="f-hint" role="status" data-testid="quick-status"></p>
+        </section>
         <details id="ai-settings" class="ai-settings"></details>
         <div id="source-info" class="f-hint"></div>
         <div id="source-text" class="source-text"></div>

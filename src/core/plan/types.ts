@@ -40,6 +40,8 @@ export interface FieldDescriptor {
   optionsPartial?: boolean;
   datePrecision?: 'year' | 'month' | 'day'; // probe 得到的日期面板粒度
   hasPresentOption?: boolean; // 结束时间是否有“至今”
+  /** 这一栏需要本人完成（日历、地区面板、上传、声明）时的说明；有它就不出填写计划 */
+  manualNote?: string;
   visible: boolean;
 }
 

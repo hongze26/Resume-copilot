@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { buildPrompt, customToRules, pageStructure, parseMapping, pathsForCollection, type CustomAdapterDef } from '../../src/adapters/custom';
+import { describe, expect, it, vi } from 'vitest';
+import { buildPrompt, customToRules, localMapping, pageStructure, parseMapping, pathsForCollection, sanitizeCustomDefs, type CustomAdapterDef } from '../../src/adapters/custom';
+import { chatJson } from '../../src/pages/shared/ai-chat';
 import { composeRules } from '../../src/adapters/dynamic';
 import { buildPlan } from '../../src/core/plan/plan';
 import { fd, sampleProfile } from './helpers';
@@ -151,5 +152,65 @@ describe('定制适配器：对应到档案的自定义字段', () => {
     expect(moved.level).toBe('high');
     expect(moved.value).toMatchObject({ t: 'radio', text: '否' });
     expect(plan.find((p) => p.label === '兴趣爱好')!.level).toBe('low');
+  });
+});
+
+describe('定制适配器：不用大模型，按本机规则生成', () => {
+  const sitePage = () => [
+    fd({ label: '姓名', section: '个人信息（必填）' }),
+    fd({ label: '联系邮箱', section: '个人信息（必填）' }),
+    fd({ label: '出生日期', section: '个人信息（必填）', manualNote: '日历面板请本人选择' }),
+    fd({ label: '学校', section: '学习情况' }),
+    fd({ label: '专业名称', section: '学习情况' }),
+    fd({ label: '技能名称', section: '专业技能' }),
+  ];
+
+  it('区块栏目按标题判断，把握大的字段直接对应，没把握的只给出推测', () => {
+    const fields = sitePage();
+    const s = pageStructure('https://jobs.example.com/', fields);
+    const m = localMapping(s, fields);
+    expect(m.sections.map((x) => [x.title, x.collection])).toEqual([['个人信息（必填）', 'single'], ['学习情况', 'education'], ['专业技能', 'skills']]);
+    const byLabel = Object.fromEntries(m.fields.map((f, i) => [f.label, { path: f.path, manual: f.manual, guess: m.guesses.get(i)?.path }]));
+    expect(byLabel['姓名'].path).toBe('basic.name');
+    expect(byLabel['出生日期'].manual).toBe('日历面板请本人选择');
+    expect(byLabel['技能名称'].path).toBe('skills.name');
+    // 打分只有“中”的不写死（保存后仍按通用识别的“中”处理，默认勾选、提示核对），只在复核时显示推测
+    expect(byLabel['学校']).toEqual({ path: undefined, manual: undefined, guess: 'education.school' });
+    expect(m.dropped).toEqual([]);
+  });
+
+  it('“专业技能”栏目：模型可以选，备份导入时不丢', () => {
+    const fields = sitePage();
+    const s = pageStructure('https://jobs.example.com/', fields);
+    const reply = JSON.stringify({ sections: [{ title: '专业技能', collection: 'skills' }], fields: [{ i: 5, path: 'skills.name' }] });
+    const m = parseMapping(reply, s, fields);
+    expect(m.sections.find((x) => x.title === '专业技能')?.collection).toBe('skills');
+    expect(m.fields[5].path).toBe('skills.name');
+    expect(buildPrompt()).toMatch(/skills/);
+    const def: CustomAdapterDef = { id: 'custom-k', name: '站', hosts: ['a.example.com'], createdAt: 'x', updatedAt: 'x', sections: [{ key: 's0', title: '专业技能', collection: 'skills' }], fields: [{ section: 's0', label: '技能名称', path: 'skills.name' }] };
+    expect(sanitizeCustomDefs([def])[0]?.sections).toEqual([{ key: 's0', title: '专业技能', collection: 'skills' }]);
+  });
+
+  it('模型返回的区块标题和页面差几个字（去掉了“（必填）”）也能对上', () => {
+    const fields = [fd({ label: '姓名', section: '个人信息' }), fd({ label: '学校', section: '教育背景（本科及以上）' }), fd({ label: '技能名称', section: '专业技能' })];
+    const s = pageStructure('https://jobs.example.com/', fields);
+    const reply = JSON.stringify({ sections: [{ title: '个人信息', collection: 'single' }, { title: '教育背景', collection: 'education' }, { title: ' 专业技能 ', collection: 'skills' }], fields: [{ i: 1, path: 'education.school' }] });
+    const m = parseMapping(reply, s, fields);
+    expect(m.sections.map((x) => x.collection)).toEqual(['single', 'education', 'skills']);
+    expect(m.fields[1].path).toBe('education.school');
+  });
+});
+
+describe('大模型接口', () => {
+  it('不支持 JSON 输出参数（HTTP 400）时去掉该参数重试一次', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch');
+    try {
+      fetcher.mockResolvedValueOnce(new Response('{"error":{"message":"response_format unsupported"}}', { status: 400 }));
+      fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{"ok":1}' } }] })));
+      expect(await chatJson({ endpoint: 'https://api.example.com/v1', model: 'm', apiKey: '' }, 'sys', 'user', new AbortController().signal)).toBe('{"ok":1}');
+      expect(JSON.parse(String(fetcher.mock.calls[1][1]!.body))).not.toHaveProperty('response_format');
+    } finally {
+      fetcher.mockRestore();
+    }
   });
 });

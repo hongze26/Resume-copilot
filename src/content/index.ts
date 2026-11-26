@@ -4,11 +4,13 @@ import { diagnose } from './diag';
 import { execute, undo } from './exec';
 import { snapshot } from './drivers';
 import { norm } from '../core/normalize/text';
+import { sanitizeHints } from '../core/platform-hints';
+import { platformInfo, setCustomHints } from './platform';
 import { isVisible, text } from './dom';
 import { clearMarks, mark } from './overlay';
 import { probe } from './probe';
 import { describeFormWithValues, frameStats, registry, scan } from './scan';
-import { resumeSectionTitles, siteDomFor, type SiteDom } from './site';
+import { hasInlineGroups, resumeSectionTitles, siteDomFor, type SiteDom } from './site';
 
 declare const __VERSION__: string;
 
@@ -99,6 +101,7 @@ if (!w[FLAG]) {
       case 'rc/ping':
         return { ok: true, type: 'rc/ping', version: MSG_VERSION };
       case 'rc/scan': {
+        setCustomHints(sanitizeHints(req.hints));
         currentSite = siteDomFor(req.adapterId);
         const fields = scan(currentSite, { sectionKey: req.sectionKey });
         const generic = currentSite.id === 'generic';
@@ -110,6 +113,8 @@ if (!w[FLAG]) {
           url: location.href,
           frames: frameStats(),
           pageSections: generic ? resumeSectionTitles() : undefined,
+          platform: generic ? platformInfo() : undefined,
+          inlineGroups: generic ? hasInlineGroups() : undefined,
         };
       }
       case 'rc/probe':

@@ -9,7 +9,7 @@ import { zhilianDom } from './zhilian';
 import type { SiteDom } from './types';
 
 export type { FormContainer, SectionHandle, SectionInfo, SiteDom } from './types';
-export { resumeSectionTitles } from './generic';
+export { hasInlineGroups, resumeSectionTitles } from './generic';
 
 export function siteDomFor(adapterId: string): SiteDom {
   if (adapterId === 'iguopin') return iguopinDom;

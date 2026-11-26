@@ -4,17 +4,19 @@ import { MSG_VERSION, type Response } from '../../core/messages';
 import { buildPlan } from '../../core/plan/plan';
 import type { ExecItem, ExecResult, FieldDescriptor, FillValue, PlanItem } from '../../core/plan/types';
 import { toast } from '../shared/ui';
-import { state, pickAdapter, domId, applySections, splitGroupId, type Choice, type FormPlan } from './state';
+import { state, pickAdapter, domId, applySections, splitGroupId, currentDef, inlineGroups, isGenericFlow, type Choice, type FormPlan } from './state';
 import { anchorOf, setPendingFocus } from './scroll';
 import { send, ensureContent } from './bridge';
-import { sectionCollection, boundRecord } from './records';
+import { sectionCollection, boundRecord, orderedRecords } from './records';
+import type { PickRequest } from '../../core/ai-pick';
 import { render } from './render';
 
 // ---------------- 扫描与计划 ----------------
 
 export function planFor(sectionKey: string, formIndex: number, fields: FieldDescriptor[]): FormPlan {
   const col = sectionCollection(sectionKey);
-  const record = col ? boundRecord(sectionKey) : undefined;
+  const inline = inlineGroups();
+  const record = col ? (inline ? orderedRecords(col)[formIndex] : boundRecord(sectionKey)) : undefined;
   const items =
     col && !record
       ? []
@@ -32,7 +34,7 @@ export function planFor(sectionKey: string, formIndex: number, fields: FieldDesc
     const pick = it.value ?? (it.level === 'medium' && it.candidates?.length && (!it.longtext || it.candidates.length === 1) ? it.candidates[0].value : undefined);
     choices.set(it.fieldKey, { checked: (it.level === 'high' || it.level === 'medium') && !!pick, value: pick });
   }
-  if (record) state.activeRecord.set(sectionKey, record.id);
+  if (record && !inline) state.activeRecord.set(sectionKey, record.id);
   return { id: `${sectionKey}:${formIndex}`, sectionKey, formIndex, record, items, choices, state: 'preview', runIds: [] };
 }
 
@@ -85,29 +87,34 @@ export async function doScan(sectionKey?: string): Promise<void> {
     const builtin = ADAPTERS.find((a) => a.id === pickAdapter(state.url, state.tabId).id);
     if (builtin) state.adapter = builtin;
     state.fallbackGeneric = false;
-    let r = await send<Extract<Response, { type: 'rc/scan' }>>({ type: 'rc/scan', version: MSG_VERSION, adapterId: domId(), sectionKey });
+    let r = await send<Extract<Response, { type: 'rc/scan' }>>({ type: 'rc/scan', version: MSG_VERSION, adapterId: domId(), sectionKey, hints: currentDef()?.hints });
     // 内置适配器在这个页面上找不到它认识的简历区块（改版、其他子页面）：改用通用识别
     if (builtin && !sectionKey && !r.sections.some((s) => builtin.sections.some((x) => x.key === s.key))) {
       state.fallbackGeneric = true;
       r = await send<Extract<Response, { type: 'rc/scan' }>>({ type: 'rc/scan', version: MSG_VERSION, adapterId: 'generic' });
     }
     state.frames = r.frames;
+    state.platform = r.platform;
+    state.inlinePage = r.inlineGroups === true;
     state.pageSections = r.pageSections ?? [];
     applySections(r.sections);
     await refreshSaved();
     // 扫描会重置页面上的控件登记表，所以全部计划重建
     state.plans.clear();
     const all: PlanItem[] = [];
+    // 探测到的选项、日期精度合并进字段后一起保存（大模型挑选要看选项）
+    const probed = new Map<string, FieldDescriptor>();
     for (const [id, fs] of groupFields(r.fields)) {
       const [sk, fi] = splitGroupId(id);
       if (!state.adapter!.sections.find((s) => s.key === sk && s.mode !== 'manual')) continue;
       const pre = planFor(sk, fi, fs);
       const merged = await probeAndMerge(fs, pre.items);
+      for (const f of merged) probed.set(f.key, f);
       const fp = planFor(sk, fi, merged);
       state.plans.set(id, fp);
       all.push(...fp.items);
     }
-    state.fields = r.fields;
+    state.fields = r.fields.map((f) => probed.get(f.key) ?? f);
     await highlight(all);
     state.scanned = true;
   } catch (e) {
@@ -166,8 +173,12 @@ export async function executePlan(fp: FormPlan): Promise<void> {
   setPendingFocus(anchorOf(`sec:${fp.sectionKey}`));
   render();
   try {
-    const deps = chosen.filter((c) => c.dependency);
-    const rest = chosen.filter((c) => !c.dependency);
+    // “先填学历、重新扫描、再填其余”只用于内置适配器（国聘、智联选了学历会多出条件字段）。
+    // 通用流程不这样做：重新扫描会让其他区块的计划全部作废，本人得再扫一遍才能接着填；
+    // 学历仍然排在最前面填，网站因此重画表单时由执行器按字段名找回控件。
+    const split = !isGenericFlow();
+    const deps = split ? chosen.filter((c) => c.dependency) : [];
+    const rest = split ? chosen.filter((c) => !c.dependency) : chosen;
     let restItems = rest;
     if (deps.length > 0) {
       const r1 = await runExec(fp, deps);
@@ -183,7 +194,7 @@ export async function executePlan(fp: FormPlan): Promise<void> {
         if (it?.path) confirmedByPath.set(it.path, c);
       }
       const oldPaths = new Set(fp.items.map((x) => x.path).filter(Boolean));
-      const sr = await send<Extract<Response, { type: 'rc/scan' }>>({ type: 'rc/scan', version: MSG_VERSION, adapterId: domId(), sectionKey: fp.sectionKey });
+      const sr = await send<Extract<Response, { type: 'rc/scan' }>>({ type: 'rc/scan', version: MSG_VERSION, adapterId: domId(), sectionKey: fp.sectionKey, hints: currentDef()?.hints });
       const fs = sr.fields.filter((f) => f.sectionKey === fp.sectionKey && f.formIndex === fp.formIndex);
       const pre = buildPlan(fs, { profile: state.profile!, adapter: state.adapter, collection: sectionCollection(fp.sectionKey) ?? 'single', record: fp.record });
       const merged = await probeAndMerge(fs, pre);
@@ -252,6 +263,27 @@ export async function retryWithCandidate(fp: FormPlan, res: ExecResult, cand: st
   const r = await runExec(fp, [{ fieldKey: res.fieldKey, label: res.label, kind, value }]);
   fp.results = (fp.results ?? []).map((x) => (x.fieldKey === res.fieldKey ? r[0] : x));
   } finally { state.busy = false; render(); }
+}
+
+/** 采纳大模型挑出的选项：这一项变成“中”，默认勾选，理由里写明来源。返回采纳的项数。 */
+export function applyPicks(reqs: Array<PickRequest & { fieldKey: string }>, picks: Map<number, string>): number {
+  let n = 0;
+  for (const r of reqs) {
+    const option = picks.get(r.i);
+    if (!option) continue;
+    for (const fp of state.plans.values()) {
+      const it = fp.items.find((x) => x.fieldKey === r.fieldKey);
+      if (!it || fp.state !== 'preview') continue;
+      const value: FillValue = it.kind === 'radio' || it.kind === 'radio-button' ? { t: 'radio', text: option } : { t: 'option', text: option, search: option };
+      it.level = 'medium';
+      it.skipReason = undefined;
+      it.candidates = [{ value, display: option }];
+      it.reasons = [...it.reasons, `大模型从网页的选项里挑了“${option}”，请核对`];
+      fp.choices.set(it.fieldKey, { checked: true, value });
+      n++;
+    }
+  }
+  return n;
 }
 
 export async function openForm(sectionKey: string): Promise<void> {

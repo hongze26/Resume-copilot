@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>本地夹具 · 原生日期框（native/dates）</title>
+    <style>body{font-family:system-ui,"Microsoft YaHei",sans-serif;max-width:720px;margin:24px auto} .row{margin:10px 0}</style>
+  </head>
+  <body>
+    <!-- 企业自建招聘系统常见：浏览器自带的日期框（type=date / type=month），值必须是 2024-09-01 / 2024-09 这样的格式 -->
+    <form id="f" onsubmit="window.__submits=(window.__submits||0)+1;return false;">
+      <h2>个人信息</h2>
+      <div class="row"><label for="name">姓名</label> <input id="name" type="text" /></div>
+      <div class="row"><label for="birth">出生日期</label> <input id="birth" type="date" /></div>
+      <h2>教育经历</h2>
+      <div class="row"><label for="sch">学校名称</label> <input id="sch" type="text" /></div>
+      <div class="row"><label for="es">入学时间</label> <input id="es" type="month" /></div>
+      <div class="row"><label for="ee">毕业时间</label> <input id="ee" type="month" /></div>
+      <button type="submit">提交</button>
+    </form>
+  </body>
+</html>

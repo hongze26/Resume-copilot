@@ -1,5 +1,5 @@
 // 构建期网络入口与权限检查：
-// 1. 我们自己的源码（src/）仅允许 ai-client.ts（档案页简历识别）与 ai-chat.ts（侧边栏生成定制适配器）使用网络 API，且都只在用户确认后调用。
+// 1. 我们自己的源码（src/）只允许 pages/shared/ai-chat.ts 使用网络 API（档案页简历识别、侧边栏生成定制适配器、下拉挑选共用），且都只在用户确认后调用。
 // 2. 发布产物 manifest 的 CSP 仅允许自身、HTTPS 和本机 HTTP 连接，
 //    且没有 host_permissions / externally_connectable。
 // 3. 列出产物中出现的外部 URL 字符串（第三方库里的命名空间、文档链接等），只用于人工复核。
@@ -24,7 +24,7 @@ function walk(dir, exts) {
 }
 
 // 1. 源码
-const ALLOWED_NET = new Set(['src/pages/profile/ai-client.ts', 'src/pages/shared/ai-chat.ts']);
+const ALLOWED_NET = new Set(['src/pages/shared/ai-chat.ts']);
 const NET = /\b(fetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|importScripts\s*\()/;
 for (const f of walk('src', ['.ts'])) {
   readFileSync(f, 'utf8')
@@ -60,4 +60,4 @@ if (failed) {
   console.error('网络检查未通过');
   process.exit(1);
 }
-console.log(`✓ 网络检查通过：仅 ai-client / ai-chat 在用户确认后发出显式 API 请求；CSP=${csp}`);
+console.log(`✓ 网络检查通过：仅 ai-chat 在用户确认后发出显式 API 请求；CSP=${csp}`);

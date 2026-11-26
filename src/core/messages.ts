@@ -1,5 +1,6 @@
 // 扩展内部消息。所有消息带 type 与 version，接收方做结构校验，不符合的直接丢弃。
 import type { ExecItem, ExecResult, FieldDescriptor, ProbeResult } from './plan/types';
+import type { SerialHints } from './platform-hints';
 
 export const MSG_VERSION = 1;
 
@@ -19,7 +20,8 @@ export interface SectionInfoMsg {
 
 export type Request =
   | { type: 'rc/ping'; version: 1 }
-  | { type: 'rc/scan'; version: 1; adapterId: string; sectionKey?: string }
+  /** hints：定制适配器带的页面结构提示（content/platform），页面收到后再校验一次 */
+  | { type: 'rc/scan'; version: 1; adapterId: string; sectionKey?: string; hints?: SerialHints }
   | { type: 'rc/probe'; version: 1; keys: string[] }
   | { type: 'rc/exec'; version: 1; runId: string; items: ExecItem[] }
   | { type: 'rc/undo'; version: 1; runId?: string }
@@ -44,6 +46,10 @@ export type Response =
       frames?: { sameOrigin: number; crossOrigin: number };
       /** 通用识别：页面上像简历区块的标题（教育经历、工作经历…） */
       pageSections?: string[];
+      /** 识别到的招聘平台（content/platform）：名称、提示语、多条记录是否排在同一页 */
+      platform?: { id: string; name: string; notes: string[]; inlineGroups: boolean };
+      /** 通用识别：多条记录排在同一页（平台提示给的，或按结构推断的） */
+      inlineGroups?: boolean;
     }
   | { ok: true; type: 'rc/probe'; probes: ProbeResult[] }
   | { ok: true; type: 'rc/exec'; results: ExecResult[] }

@@ -2,7 +2,7 @@
 import type { ExecItem, ExecResult } from '../core/plan/types';
 import { norm } from '../core/normalize/text';
 import { ForbiddenActionError, settle } from './dom';
-import { clearControl, closeCategoryModal, closeDropdownOf, drive, snapshot } from './drivers';
+import { clearControl, closeCategoryModal, closeDropdownOf, drive, isGenericControl, snapshot } from './drivers';
 import { registry, relocate } from './scan';
 import type { SiteDom } from './site';
 import { mark } from './overlay';
@@ -83,7 +83,8 @@ export async function execute(runId: string, items: ExecItem[], onProgress?: (do
         if (r.ok) {
           log.push({ key: it.fieldKey, label: it.label, kind, el, before, after, value: it.value });
           results.push({ fieldKey: it.fieldKey, label: it.label, status: 'ok', undoable: true, ...(r.detail ? { detail: r.detail } : {}) });
-          mark(el, 'ok');
+          if (r.warn) mark(el, 'medium', '选了最接近的，请核对');
+          else mark(el, 'ok');
         } else {
           // 失败但页面已被改动（少见）：同样记录，允许撤销
           if (after !== before) log.push({ key: it.fieldKey, label: it.label, kind, el, before, after, value: it.value });
@@ -91,7 +92,7 @@ export async function execute(runId: string, items: ExecItem[], onProgress?: (do
           mark(el, 'fail');
         }
       } catch (e) {
-        if (kind === 'select' || kind === 'remote-select') await closeDropdownOf(el).catch(() => undefined);
+        if (kind === 'select' || kind === 'remote-select' || isGenericControl(el)) await closeDropdownOf(el).catch(() => undefined);
         if (it.value.t === 'popup-pick') await closeCategoryModal().catch(() => undefined);
         const forbidden = e instanceof ForbiddenActionError;
         results.push({ fieldKey: it.fieldKey, label: it.label, status: 'failed', reason: forbidden ? 'aborted' : 'verify-failed', detail: forbidden ? (e as Error).message : '填写时出错了' });

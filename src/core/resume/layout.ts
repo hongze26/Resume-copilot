@@ -1,14 +1,25 @@
 // PDF 文字项 → 阅读顺序的文本行。处理常见的“左侧个人信息栏 + 右侧经历栏”两栏简历：
 // 先找一条几乎没有文字跨过的竖向空白带（栏间距），左右两栏分别从上到下排，再拼接。
+import { isSectionHeading } from './parse';
 
 export interface PdfItem {
   str: string;
   x: number; // 左下角 x
   y: number; // 基线 y（越大越靠上）
   w: number; // 宽度
+  h?: number; // 字号（不知道时按 10 估）
 }
 
 const ROW_TOLERANCE = 3;
+
+/** 同一行两段文字之间的空隙超过约一个字宽时，按“分栏”处理（两个空格），解析器据此切分表格和“日期  学校  专业”。 */
+function gapText(prev: PdfItem | undefined, part: PdfItem): string {
+  if (!prev || /\s$/.test(prev.str) || /^\s/.test(part.str)) return '';
+  const gap = part.x - (prev.x + prev.w);
+  if (gap <= 1) return '';
+  const size = part.h || prev.h || 10;
+  return gap >= Math.max(5, size * 0.9) ? '  ' : ' ';
+}
 
 function toRows(items: PdfItem[]): string[] {
   const rows: Array<{ y: number; parts: PdfItem[] }> = [];
@@ -23,12 +34,8 @@ function toRows(items: PdfItem[]): string[] {
   rows.sort((a, b) => b.y - a.y);
   return rows.map((r) => {
     const parts = r.parts.sort((a, b) => a.x - b.x);
-    return parts.map((part, i) => {
-      const prev = parts[i - 1];
-      // PDF 字体切换会把同一个词拆成多个项；只在版面上确有空隙时补空格。
-      const separated = prev && part.x - (prev.x + prev.w) > 1 && !/\s$/.test(prev.str) && !/^\s/.test(part.str);
-      return `${separated ? ' ' : ''}${part.str}`;
-    }).join('');
+    // PDF 字体切换会把同一个词拆成多个项；只在版面上确有空隙时补空格。
+    return parts.map((part, i) => `${gapText(parts[i - 1], part)}${part.str}`).join('');
   });
 }
 
@@ -61,6 +68,15 @@ export function findGutter(items: PdfItem[], pageWidth: number): number | undefi
   const leftInRight = leftYs.filter((y) => y >= rMin && y <= rMax).length;
   const rightInLeft = rightYs.filter((y) => y >= lMin && y <= lMax).length;
   if (leftInRight < 3 || rightInLeft < 3) return undefined;
+  // 表格式简历：左右两半逐行对齐在同一基线上（“姓名 王五 | 性别 男”），是一张表而不是两栏。
+  // 真正的两栏简历两边各有区块标题；只有一边有标题时，按两栏拆开会把另一半内容接到错误的区块下。
+  const leftRows = [...new Set(leftYs.map((y) => Math.round(y)))];
+  const aligned = leftRows.filter((y) => rightYs.some((ry) => Math.abs(ry - y) < 1.5)).length;
+  if (leftRows.length >= 3 && aligned / leftRows.length >= 0.4) {
+    const left = textItems.filter((i) => i.x + i.w <= best!.x);
+    const right = textItems.filter((i) => i.x >= best!.x);
+    if (!(toRows(left).some(isSectionHeading) && toRows(right).some(isSectionHeading))) return undefined;
+  }
   return best.x;
 }
 

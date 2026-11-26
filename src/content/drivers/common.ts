@@ -1,8 +1,8 @@
 // 驱动的公共部分：结果类型 + 原生控件（文本框、原生下拉、原生单选、复选框）。
 // 各组件库驱动（antd.ts、element.ts）只处理自己的浮层控件，文本输入统一走这里。
 import { norm } from '../../core/normalize/text';
-import type { SkipReason } from '../../core/plan/types';
-import { blurEl, focusEl, isTag, safeClick, setNativeValue, settle, text } from '../dom';
+import type { FillValue, SkipReason } from '../../core/plan/types';
+import { blurEl, focusEl, isEditable, isTag, safeClick, setNativeValue, settle, text } from '../dom';
 import { radioLabel } from '../scan';
 
 export interface DriverResult {
@@ -11,6 +11,8 @@ export interface DriverResult {
   detail?: string;
   /** 选项不唯一或找不到时，页面上的候选文字（给用户挑选） */
   candidates?: string[];
+  /** 填上了，但不是一字不差（选了最接近的候选）：页面上标成“需确认” */
+  warn?: boolean;
 }
 
 export const OK: DriverResult = { ok: true };
@@ -24,7 +26,36 @@ export function inputOf(el: Element): HTMLInputElement | HTMLTextAreaElement | n
 
 // ---------------- 原生文本 ----------------
 
+/**
+ * 写入富文本编辑框：选中全部内容后用 insertText 输入，走浏览器自己的编辑流程，编辑器的数据才会跟着变；
+ * 浏览器不支持时直接改文字并补发 input 事件。
+ */
+async function fillEditable(el: HTMLElement, value: string): Promise<DriverResult> {
+  const doc = el.ownerDocument;
+  focusEl(el);
+  const range = doc.createRange();
+  range.selectNodeContents(el);
+  const sel = doc.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+  let done = false;
+  try {
+    done = doc.execCommand(value ? 'insertText' : 'delete', false, value);
+  } catch {
+    done = false;
+  }
+  if (!done) {
+    el.textContent = value;
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+  }
+  sel?.removeAllRanges();
+  blurEl(el);
+  await settle();
+  return norm(el.innerText) === norm(value) ? OK : fail('verify-failed', '编辑框里的内容和要填的不一样（网站可能改写了格式）');
+}
+
 export async function fillText(el: Element, value: string): Promise<DriverResult> {
+  if (isEditable(el)) return fillEditable(el, value);
   const input = inputOf(el);
   if (!input) return fail('not-supported', '找不到输入框');
   if (input.disabled) return fail('locked');
@@ -41,6 +72,33 @@ export async function fillText(el: Element, value: string): Promise<DriverResult
     return fail('verify-failed', '失焦后内容被网站改写或回滚');
   }
   return OK;
+}
+
+// ---------------- 原生日期框（type=date / month / datetime-local） ----------------
+
+export function isNativeDate(el: Element): el is HTMLInputElement {
+  return isTag(el, 'INPUT') && (el.type === 'date' || el.type === 'month' || el.type === 'datetime-local');
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 按日期框要求的格式写入：date → 2024-09-01，month → 2024-09，datetime-local → 2024-09-01T00:00。 */
+export async function fillNativeDate(el: HTMLInputElement, value: FillValue): Promise<DriverResult> {
+  if (value.t !== 'date') return fail('not-supported', '这个日期框只能填一个日期');
+  if (value.date === 'present') return fail('no-option', '这个日期框不能填“至今”');
+  if (el.disabled) return fail('locked');
+  if (el.readOnly) return fail('not-supported', '日期框为只读');
+  const d = value.date;
+  const ym = d.m ? `${d.y}-${pad2(d.m)}` : undefined;
+  const ymd = ym && d.d ? `${ym}-${pad2(d.d)}` : undefined;
+  const s = el.type === 'month' ? ym : el.type === 'date' ? ymd : ymd && `${ymd}T00:00`;
+  if (!s) return fail('no-profile-value', el.type === 'month' ? '档案里这个日期没写月份' : '档案里这个日期没写到哪一天');
+  focusEl(el);
+  setNativeValue(el, s);
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  blurEl(el);
+  await settle();
+  return el.value === s ? OK : fail('verify-failed', '日期框没有接受这个日期（可能超出了网站允许的范围）');
 }
 
 // ---------------- 原生 select / radio / checkbox ----------------
@@ -98,6 +156,7 @@ export function snapshotNative(el: Element, kind: string): string | undefined {
     case 'text':
     case 'textarea':
     case 'number':
+      if (isEditable(el)) return el.innerText.trim();
       return inputOf(el)?.value ?? '';
     default:
       return undefined;
